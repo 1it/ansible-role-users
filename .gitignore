@@ -1,0 +1,2 @@
+# Ignore SSH public keys
+/files/public_keys/*.pub

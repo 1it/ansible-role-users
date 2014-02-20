@@ -1,0 +1,150 @@
+---
+# Defines tasks to configure user accounts
+
+- name: Create global user's group
+  group: >
+    name="{{ users_default_group }}"
+    state=present
+  when: users_create_group_per_user == false
+  tags:
+    - common
+    - users
+
+- name: Create per-user groups
+  group: >
+    name="{{ item.username }}"
+    gid="{{ item.uid }}"
+    state=present
+  with_items: users_current
+  when: users_current is defined and users_create_group_per_user
+  tags:
+    - common
+    - users
+
+- name: Create user accounts
+  user: >
+    name="{{ item.username }}"
+    uid="{{ item.uid }}"
+    group="{{ item.username if users_create_group_per_user else users_default_group }}"
+    groups="{{ item.groups|join(',') if item.groups is defined else '' }}"
+    shell="{{ item.shell if item.shell is defined else users_default_shell }}"
+    createhome="{{ 'yes' if users_create_homedir else 'no' }}"
+    home="{{ item.home if item.home is defined else "/home/%s" % item.username }}"
+    system="{{ 'yes' if item.system is defined and item.system == true else 'no' }}"
+    generate_ssh_key="{{ 'yes' if item.generate_key is defined and item.generate_key == true else 'no' }}"
+    ssh_key_comment="{{ item.username }}@{{ ansible_hostname }}"
+    comment="{{ item.name if item.name is defined else '' }}"
+    state=present
+  with_items: users_current
+  when: users_current is defined
+  tags:
+    - common
+    - users
+
+- name: Add developer SSH keys to appropriate users
+  authorized_key: >
+    user="{{ item.0.username }}"
+    key="{{ lookup('file', './public_keys/' + item.1 + '.pub') }}"
+    state="present"
+  with_subelements:
+    - users_current
+    - authorized
+  when: users_current is defined
+  tags:
+    - common
+    - users
+
+- name: Create root-accessible password store
+  file: >
+    path=/root/.passwd
+    mode=0400 owner=root group=root
+    state=directory
+  when: users_create_password == true
+  tags:
+    - common
+    - users
+
+- name: Generate passwords for user accounts
+  shell: >
+    curl -s https://ashpass.herokuapp.com/crypt > /root/.passwd/{{ item.username }}
+    creates=/root/.passwd/{{ item.username }}
+  register: generated_passwords
+  with_items: users_current
+  when: users_create_password == true
+  tags:
+    - common
+    - users
+
+- name: Read passwords for new user accounts
+  shell: >
+    cat /root/.passwd/{{ item.item.username }}
+  when: users_create_password == true and item|changed
+  with_items: generated_passwords.results
+  register: passwords
+  tags:
+    - common
+    - users
+
+- name: Set passwords for new user accounts
+  user: >
+    name="{{ item.item.item.username }}"
+    password="{{ item.stdout.split().1 }}"
+    update_password=always
+  when: passwords is defined and item|changed
+  with_items: passwords.results
+  tags:
+    - common
+    - users
+
+- name: Notify team of passwords for new user accounts
+  hipchat: >
+    token="{{ users_hipchat_token }}"
+    room="{{ users_hipchat_room }}"
+    msg="Password for user '{{ item.item.item.username }}' on {{ ansible_hostname }} ({{ hostvars[inventory_hostname].ansible_default_ipv4.address }}) is {{ item.stdout.split().0 }}"
+  when: users_hipchat_token and users_hipchat_room and passwords is defined and item|changed
+  with_items: passwords.results
+  tags:
+    - common
+    - users
+
+- name: Protect root-accessible password store
+  file: >
+    path=/root/.passwd
+    mode=0400
+    state=directory
+    recurse=yes
+  when: users_create_password == true
+  tags:
+    - common
+    - users
+
+- name: Delete old user accounts
+  user: >
+    name="{{ item.username }}"
+    state=absent
+    remove=yes
+  with_items: users_retired
+  when: users_retired is defined
+  tags:
+    - common
+    - users
+
+- name: Delete old user groups
+  group: >
+    name="{{ item.username }}"
+    state=absent
+  with_items: users_retired
+  when: users_retired is defined
+  tags:
+    - common
+    - users
+
+- name: Delete password entries
+  file: >
+    path=/root/.passwd/{{ item.username }}
+    state=absent
+  with_items: users_retired
+  when: users_retired is defined
+  tags:
+    - common
+    - users
