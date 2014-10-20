@@ -118,6 +118,17 @@
     - common
     - users
 
+- name: Secure the users SSH directory
+  file: >
+    dest={{ item.home if item.home is defined else "/home/%s" % item.username }}/.ssh
+    state=directory
+    mode=0700
+  with_items: users_current
+  when: users_current is defined
+  tags:
+    - common
+    - users
+
 - name: Delete old user accounts
   user: >
     name="{{ item.username }}"
