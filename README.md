@@ -4,7 +4,8 @@ This role allows simple management of user accounts on a system.
 
 ## Requirements
 
-This role requires [Ansible](http://www.ansibleworks.com/) version 1.4 or higher and the Debian/Ubuntu platform.
+This role requires [Ansible](http://www.ansibleworks.com/) version 1.4 or higher
+and the Debian/Ubuntu platform.
 
 ## Role Variables
 
@@ -32,7 +33,7 @@ users_create_group_per_user: true
 users_create_homedir: true
 
 # The default flag for whether to generate passwords for new accounts. The
-# randomly generated passwords are stored in the root user's home directory or 
+# randomly generated passwords are stored in the root user's home directory or
 # optionally sent to HipChat
 users_create_password: false
 
@@ -87,7 +88,7 @@ users_retired:
     - name: Apply common users to all nodes
       hosts: all
       roles:
-        - { role: users, 
+        - { role: users,
             users_current:
               - username: 'sysadmin'
                 uid: 1000
@@ -101,11 +102,16 @@ users_retired:
           }
     ```
 
-__Note__: When creating a variable containing the list of users to add or remove, the best place to start is in `group_vars/all`. Try `group_vars/groupname` or `host_vars/hostname` if you only want users on certain machines.
+__Note__: When creating a variable containing the list of users to add or remove,
+the best place to start is in `group_vars/all`. Try `group_vars/groupname` or
+`host_vars/hostname` if you only want users on certain machines.
 
 ## Dependencies
 
-None.
+The following packages may be required for Debian derivatives:
+
+- `urllib`
+- `urllib2`
 
 ## License
 
