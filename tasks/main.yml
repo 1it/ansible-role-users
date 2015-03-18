@@ -97,11 +97,13 @@
     - users
 
 - name: Notify team of passwords for new user accounts
-  hipchat: >
-    token="{{ users_hipchat_token }}"
-    room="{{ users_hipchat_room }}"
-    msg="Password for user '{{ item.item.item.username }}' on {{ inventory_hostname }} ({{ hostvars[inventory_hostname].ansible_default_ipv4.address }}) is {{ item.stdout.split().0 }}"
-  when: users_hipchat_token and users_hipchat_room and passwords is defined and item|changed
+  slack: >
+    token="{{ users_slack_token }}"
+    domain="{{ users_slack_domain }}"
+    channel="#notify"
+    username="Ansible on {{ inventory_hostname }}"
+    msg="Password for user `{{ item.item.item.username }}` is `{{ item.stdout.split().0 }}`"
+  when: users_slack_token and users_slack_domain and passwords is defined and item|changed
   with_items: passwords.results
   tags:
     - common
