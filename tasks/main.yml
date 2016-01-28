@@ -66,7 +66,7 @@
 
 - name: Generate passwords for user accounts
   shell: >
-    curl -s https://ashpass.herokuapp.com/crypt > /root/.passwd/{{ item.username }}
+    curl -H "Content-Type:text/plain" -s https://ashpass.herokuapp.com/crypt > /root/.passwd/{{ item.username }}
     creates=/root/.passwd/{{ item.username }}
   register: generated_passwords
   with_items: users_current
