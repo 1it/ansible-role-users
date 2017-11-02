@@ -1,13 +1,15 @@
 # Users Role for Ansible
+=========
 
 This role allows simple management of user accounts on a system.
 
-## Requirements
+Requirements
+------------
+* Ansible 2.3.0 or higher
+* Ubuntu 12.04 or higher
+* Debian Wheezy or higher
 
-This role requires [Ansible](http://www.ansible.com/) version 2.0 or higher
-and the Debian/Ubuntu platform.
-
-## Role Variables
+## Variables
 
 The variables that can be passed to this role and a brief description about
 them are as follows:
@@ -69,7 +71,7 @@ users_retired:
     uid: 1001
 ```
 
-## Examples
+## Playbook example
 
 1. Creating a system admin user and a deploy user:
 
