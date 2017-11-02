@@ -4,7 +4,7 @@ This role allows simple management of user accounts on a system.
 
 ## Requirements
 
-This role requires [Ansible](http://www.ansibleworks.com/) version 1.4 or higher
+This role requires [Ansible](http://www.ansible.com/) version 2.0 or higher
 and the Debian/Ubuntu platform.
 
 ## Role Variables
@@ -20,7 +20,7 @@ users_current: []
 users_retired: []
 
 # The default shell given to all user accounts
-users_default_shell: '/bin/zsh'
+users_default_shell: '/bin/bash'
 
 # The default group new user accounts will be added to
 users_default_group: 'users'
@@ -32,16 +32,8 @@ users_create_group_per_user: true
 # The default flag for whether to create user home directories
 users_create_homedir: true
 
-# The default flag for whether to generate passwords for new accounts. The
-# randomly generated passwords are stored in the root user's home directory or
-# optionally sent to HipChat
-users_create_password: false
-
-# The HipChat API token used for new password notifications (optional)
-users_hipchat_token: false
-
-# The HipChat room used for new password notifications (optional)
-users_hipchat_room: false
+# The default groups list (to be created)
+users_group_list: []
 ```
 
 ### User List Structure
@@ -51,14 +43,14 @@ users_hipchat_room: false
 users_current:
   # First user defining only required attributes
   - username: 'johndoe'   # Linux username
-    uid: 1000             # User ID (generally non-system users start at 1000)
+    uid: 1000             # OPTIONAL User ID (generally non-system users start at 1000)
     authorized: []        # List of public SSH keys to add to the account
   # Second user defining all available attributes
   - username: 'janedoe'   # Linux username
-    uid: 1001             # User ID (generally non-system users start at 1000)
+    uid: 1001             # OPTIONAL User ID (generally non-system users start at 1000)
     authorized:           # List of public SSH keys to add to the account
-      - 'developer_key_1'
-      - 'developer_key_2'
+      - 'ssh-rsa key_string1'
+      - 'ssh-ecdsa key_string2'
     name: 'Jane Doe'      # Used as comment when creating the account
     system: false         # Specify whether the account with be a system user
     group: 'jdoe'         # Alternate user-specific primary group
@@ -72,7 +64,7 @@ users_current:
 # The list of user accounts to be removed from the system
 users_retired:
   - username: 'johndoe'   # Linux username
-    uid: 1000             # User ID (not required, but useful for reference)
+    uid: 1000             # OPTIONAL User ID (not required, but useful for reference)
   - username: 'janedoe'
     uid: 1001
 ```
@@ -90,13 +82,12 @@ users_retired:
       roles:
         - { role: users,
             users_current:
-              - username: 'sysadmin'
-                uid: 1000
-                authorized: ['dev_key']
+              - username: 'sa'
+                authorized: ['ssh-rsa key_string']
                 name: 'System Administrator'
                 groups: ['admin']
-              - username: 'deploy'
-                uid: 1001
+              - username: 'ansible'
+                name: 'Ansible service account'
                 generate_key: true
                 authorized: []
           }
@@ -107,11 +98,6 @@ the best place to start is in `group_vars/all`. Try `group_vars/groupname` or
 `host_vars/hostname` if you only want users on certain machines.
 
 ## Dependencies
-
-The following packages may be required for Debian derivatives:
-
-- `urllib`
-- `urllib2`
 
 ## License
 

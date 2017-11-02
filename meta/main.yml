@@ -1,2 +1,22 @@
----
+galaxy_info:
+  author: Ivan Tuzhilkin
+  description: Ansible role for managing user accounts and authorized ssh-keys
+  license: MIT
+  min_ansible_version: '2.3.0'
+
+  platforms:
+    - name: Ubuntu
+      versions:
+        - trusty
+        - xenial
+    - name: Debian
+      versions:
+        - jessie
+        - stretch
+
+  galaxy_tags:
+    - system
+    - users
+    - ssh-keys
+
 dependencies: []
