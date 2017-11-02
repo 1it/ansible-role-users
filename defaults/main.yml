@@ -1,13 +1,8 @@
 ---
-# The variables file used by users playbooks.
-# If not overriden in inventory or as a parameter, this is the value that will be used
-
 users_current: []
 users_retired: []
-users_default_shell: '/bin/zsh'
+users_group_list: []
+users_default_shell: '/bin/bash'
 users_default_group: 'users'
 users_create_group_per_user: true
 users_create_homedir: true
-users_create_password: false
-users_slack_token: false
-users_slack_domain: false
