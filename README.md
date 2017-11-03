@@ -21,6 +21,9 @@ users_current: []
 # The list of user accounts to be removed from the system
 users_retired: []
 
+# The list of users keys to manage ssh authorized_keys only (e.g. for root)
+users_keys: []
+
 # The default shell given to all user accounts
 users_default_shell: '/bin/bash'
 

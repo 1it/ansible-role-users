@@ -49,6 +49,16 @@
       - authorized
     when: users_current is defined
 
+  - name: "Add user's SSH keys only"
+    authorized_key:
+      user: "{{ item.0.username }}"
+      key: "{{ item.1 }}"
+      state: "present"
+    with_subelements:
+      - "{{ users_keys }}"
+      - authorized
+    when: users_keys is defined
+
   - name: "Secure the users SSH directory"
     file:
       dest: "{{ item.home if item.home is defined else '/home/%s' % item.username }}/.ssh"
