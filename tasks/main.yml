@@ -32,6 +32,7 @@
       createhome: "{{ 'yes' if users_create_homedir else 'no' }}"
       home: "{{ item.home if item.home is defined else '/home/%s' % item.username }}"
       system: "{{ 'yes' if item.system is defined and item.system == true else 'no' }}"
+      password: "{{ item.password | default(omit) }}"
       generate_ssh_key: "{{ 'yes' if item.generate_key is defined and item.generate_key == true else 'no' }}"
       ssh_key_comment: "{{ item.username }}@{{ ansible_hostname }}"
       comment: "{{ item.name if item.name is defined else '' }}"
