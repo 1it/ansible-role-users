@@ -44,6 +44,7 @@
       user: "{{ item.0.username }}"
       key: "{{ item.1 }}"
       state: "present"
+      exclusive: "{{ item.0.exclusive | default('no') }}"
     with_subelements:
       - "{{ users_current }}"
       - authorized
@@ -54,6 +55,7 @@
       user: "{{ item.0.username }}"
       key: "{{ item.1 }}"
       state: "present"
+      exclusive: "{{ item.0.exclusive | default('no') }}"
     with_subelements:
       - "{{ users_keys }}"
       - authorized
