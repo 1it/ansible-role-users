@@ -1,91 +1,87 @@
 ---
-- block:
-  - name: "Create global user's group"
-    group:
-      name: "{{ users_default_group }}"
-      state: present
-    when: users_create_group_per_user == false
+- name: "Create global user's group"
+  group:
+    name: "{{ users_default_group }}"
+    state: present
+  when: users_create_group_per_user == false
 
-  - name: "Create per-user groups"
-    group:
-      name: "{{ item.username }}"
-      gid: "{{ item.uid | default(omit) }}"
-      state: present
-    with_items: "{{ users_current }}"
-    when: users_current is defined and users_create_group_per_user
+- name: "Create per-user groups"
+  group:
+    name: "{{ item.username }}"
+    gid: "{{ item.uid | default(omit) }}"
+    state: present
+  with_items: "{{ users_current }}"
+  when: users_current is defined and users_create_group_per_user
 
-  - name: "Create groups"
-    group:
-      name: "{{ item }}"
-      state: present
-    with_items:
-      - "{{ users_group_list }}"
-    when: users_group_list is defined and users_group_list
+- name: "Create groups"
+  group:
+    name: "{{ item }}"
+    state: present
+  with_items:
+    - "{{ users_group_list }}"
+  when: users_group_list is defined and users_group_list
 
-  - name: "Create user accounts"
-    user:
-      name: "{{ item.username }}"
-      uid: "{{ item.uid | default(omit) }}"
-      group: "{{ item.username if users_create_group_per_user else users_default_group }}"
-      groups: "{{ item.groups|join(',') if item.groups is defined else '' }}"
-      shell: "{{ item.shell if item.shell is defined else users_default_shell }}"
-      createhome: "{{ 'yes' if users_create_homedir else 'no' }}"
-      home: "{{ item.home if item.home is defined else '/home/%s' % item.username }}"
-      system: "{{ 'yes' if item.system is defined and item.system == true else 'no' }}"
-      password: "{{ item.password | default(omit) }}"
-      generate_ssh_key: "{{ 'yes' if item.generate_key is defined and item.generate_key == true else 'no' }}"
-      ssh_key_comment: "{{ item.username }}@{{ ansible_hostname }}"
-      comment: "{{ item.name if item.name is defined else '' }}"
-      state: present
-    with_items: "{{ users_current }}"
-    when: users_current is defined
+- name: "Create user accounts"
+  user:
+    name: "{{ item.username }}"
+    uid: "{{ item.uid | default(omit) }}"
+    group: "{{ item.username if users_create_group_per_user else users_default_group }}"
+    groups: "{{ item.groups|join(',') if item.groups is defined else '' }}"
+    shell: "{{ item.shell if item.shell is defined else users_default_shell }}"
+    createhome: "{{ 'yes' if users_create_homedir else 'no' }}"
+    home: "{{ item.home if item.home is defined else '/home/%s' % item.username }}"
+    system: "{{ 'yes' if item.system is defined and item.system == true else 'no' }}"
+    password: "{{ item.password | default(omit) }}"
+    generate_ssh_key: "{{ 'yes' if item.generate_key is defined and item.generate_key == true else 'no' }}"
+    ssh_key_comment: "{{ item.username }}@{{ ansible_hostname }}"
+    comment: "{{ item.name if item.name is defined else '' }}"
+    state: present
+  with_items: "{{ users_current }}"
+  when: users_current is defined
 
-  - name: "Add SSH keys to appropriate users"
-    authorized_key:
-      user: "{{ item.0.username }}"
-      key: "{{ item.1 }}"
-      state: "present"
-      exclusive: "{{ item.0.exclusive | default('no') }}"
-    with_subelements:
-      - "{{ users_current }}"
-      - authorized
-    when: users_current is defined
+- name: "Add SSH keys to appropriate users"
+  authorized_key:
+    user: "{{ item.0.username }}"
+    key: "{{ item.1 }}"
+    state: "present"
+    exclusive: "{{ item.0.exclusive | default('no') }}"
+  with_subelements:
+    - "{{ users_current }}"
+    - authorized
+  when: users_current is defined
 
-  - name: "Add user's SSH keys only"
-    authorized_key:
-      user: "{{ item.0.username }}"
-      key: "{{ item.1 }}"
-      state: "present"
-      exclusive: "{{ item.0.exclusive | default('no') }}"
-    with_subelements:
-      - "{{ users_keys }}"
-      - authorized
-    when: users_keys is defined
+- name: "Add user's SSH keys only"
+  authorized_key:
+    user: "{{ item.0.username }}"
+    key: "{{ item.1 }}"
+    state: "present"
+    exclusive: "{{ item.0.exclusive | default('no') }}"
+  with_subelements:
+    - "{{ users_keys }}"
+    - authorized
+  when: users_keys is defined
 
-  - name: "Secure the users SSH directory"
-    file:
-      dest: "{{ item.home if item.home is defined else '/home/%s' % item.username }}/.ssh"
-      state: directory
-      mode: 0700
-    with_items: "{{ users_current }}"
-    when: users_current is defined
+- name: "Secure the users SSH directory"
+  file:
+    dest: "{{ item.home if item.home is defined else '/home/%s' % item.username }}/.ssh"
+    state: directory
+    mode: 0700
+  with_items: "{{ users_current }}"
+  when: users_current is defined
 
-  - name: "Delete old user accounts"
-    user:
-      name: "{{ item.username }}"
-      uid: "{{ item.uid | default(omit) }}"
-      state: absent
-      remove: "{{ item.remove | default('yes') }}"
-      force: "{{ item.force | default('no') }}"
-    with_items: "{{ users_retired }}"
-    when: users_retired is defined
+- name: "Delete old user accounts"
+  user:
+    name: "{{ item.username }}"
+    uid: "{{ item.uid | default(omit) }}"
+    state: absent
+    remove: "{{ item.remove | default('yes') }}"
+    force: "{{ item.force | default('no') }}"
+  with_items: "{{ users_retired }}"
+  when: users_retired is defined
 
-  - name: "Delete old user groups"
-    group:
-      name: "{{ item.username }}"
-      state: absent
-    with_items: "{{ users_retired }}"
-    when: users_retired is defined
-  tags:
-    - common
-    - users
+- name: "Delete old user groups"
+  group:
+    name: "{{ item.username }}"
+    state: absent
+  with_items: "{{ users_retired }}"
+  when: users_retired is defined
