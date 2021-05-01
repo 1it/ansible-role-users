@@ -1,27 +1,41 @@
 ---
-- name: "Create global user's group"
+- name: "Determine target hosts"
+  set_fact:
+     do_run: True
+  with_subelements:
+    - "{{ users_current }}"
+    - target_hosts
+    - skip_missing: True
+  when:
+    - item.1 in group_names
+
+- name: "Manage global user's group"
   group:
     name: "{{ users_default_group }}"
     state: present
-  when: users_create_group_per_user == false
+  when:
+    - not users_create_group_per_user
 
-- name: "Create per-user groups"
+- name: "Manage per-user groups"
   group:
     name: "{{ item.username }}"
     gid: "{{ item.uid | default(omit) }}"
     state: present
-  with_items: "{{ users_current }}"
-  when: users_current is defined and users_create_group_per_user
+  loop: "{{ users_current }}"
+  when:
+    - users_current is iterable and users_create_group_per_user
+    - do_run is defined or item.target_hosts is not defined
 
-- name: "Create groups"
+- name: "Manage groups"
   group:
     name: "{{ item }}"
-    state: present
-  with_items:
+    state: "{{ item.state | default('present') }}"
+  loop:
     - "{{ users_group_list }}"
-  when: users_group_list is defined and users_group_list
-
-- name: "Create user accounts"
+  when:
+    - users_group_list is iterable
+    
+- name: "Manage user accounts"
   user:
     name: "{{ item.username }}"
     uid: "{{ item.uid | default(omit) }}"
@@ -35,53 +49,44 @@
     generate_ssh_key: "{{ 'yes' if item.generate_key is defined and item.generate_key == true else 'no' }}"
     ssh_key_comment: "{{ item.username }}@{{ ansible_hostname }}"
     comment: "{{ item.name if item.name is defined else '' }}"
-    state: present
-  with_items: "{{ users_current }}"
-  when: users_current is defined
+    state: "{{ item.state | default('present') }}"
+  loop: "{{ users_current }}"
+  when:
+    - users_current is iterable
+    - do_run is defined or item.target_hosts is not defined
 
-- name: "Add SSH keys to appropriate users"
+- name: "Manage users SSH keys"
   authorized_key:
     user: "{{ item.0.username }}"
     key: "{{ item.1 }}"
-    state: "present"
+    state: "{{ item.state | default('present') }}"
     exclusive: "{{ item.0.exclusive | default('no') }}"
   with_subelements:
     - "{{ users_current }}"
     - authorized
-  when: users_current is defined
+  when:
+    - users_current is iterable
+    - do_run is defined or item.target_hosts is not defined
 
-- name: "Add user's SSH keys only"
+- name: "Manage user's SSH keys only"
   authorized_key:
     user: "{{ item.0.username }}"
     key: "{{ item.1 }}"
-    state: "present"
+    state: 'present'
     exclusive: "{{ item.0.exclusive | default('no') }}"
   with_subelements:
     - "{{ users_keys }}"
     - authorized
-  when: users_keys is defined
+  when:
+    - users_keys is iterable
+    - do_run is defined or item.target_hosts is not defined
 
 - name: "Secure the users SSH directory"
   file:
     dest: "{{ item.home if item.home is defined else '/home/%s' % item.username }}/.ssh"
     state: directory
     mode: 0700
-  with_items: "{{ users_current }}"
-  when: users_current is defined
-
-- name: "Delete old user accounts"
-  user:
-    name: "{{ item.username }}"
-    uid: "{{ item.uid | default(omit) }}"
-    state: absent
-    remove: "{{ item.remove | default('yes') }}"
-    force: "{{ item.force | default('no') }}"
-  with_items: "{{ users_retired }}"
-  when: users_retired is defined
-
-- name: "Delete old user groups"
-  group:
-    name: "{{ item.username }}"
-    state: absent
-  with_items: "{{ users_retired }}"
-  when: users_retired is defined
+  loop: "{{ users_current }}"
+  when:
+    - users_current is iterable
+    - do_run is defined or item.target_hosts is not defined
