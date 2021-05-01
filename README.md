@@ -5,9 +5,8 @@ This role allows simple management of user accounts on a system.
 
 Requirements
 ------------
-* Ansible 2.3.0 or higher
-* Ubuntu 12.04 or higher
-* Debian Wheezy or higher
+* Ansible 2.9.0 or higher
+
 
 ## Variables
 
@@ -16,10 +15,7 @@ them are as follows:
 
 ```yaml
 # The list of user accounts to be added to the system
-users_current: []
-
-# The list of user accounts to be removed from the system
-users_retired: []
+users: []
 
 # The list of users keys to manage ssh authorized_keys only (e.g. for root)
 users_keys: []
@@ -45,33 +41,34 @@ users_group_list: []
 
 ```yaml
 # The list of user accounts to be added to the system
-users_current:
+users:
   # First user defining only required attributes
-  - username: 'johndoe'   # Linux username
-    uid: 1000             # OPTIONAL User ID (generally non-system users start at 1000)
-    authorized: []        # List of public SSH keys to add to the account
+  - username: 'johndoe'     # Linux username
+    uid: 1000               # OPTIONAL User ID (generally non-system users start at 1000)
+    authorized: []          # List of public SSH keys to add to the account
+    target_hosts: ['dev']   # List of inventory host groups where user account should exist
   # Second user defining all available attributes
-  - username: 'janedoe'   # Linux username
-    uid: 1001             # OPTIONAL User ID (generally non-system users start at 1000)
-    authorized:           # List of public SSH keys to add to the account
+  - username: 'janedoe'     # Linux username
+    uid: 1001               # OPTIONAL User ID (generally non-system users start at 1000)
+    authorized:             # List of public SSH keys to add to the account
       - 'ssh-rsa key_string1'
       - 'ssh-ecdsa key_string2'
-    name: 'Jane Doe'      # Used as comment when creating the account
-    system: false         # Specify whether the account with be a system user
-    group: 'jdoe'         # Alternate user-specific primary group
-    groups:               # Additional user groups
+    name: 'Jane Doe'        # Used as comment when creating the account
+    system: false           # Specify whether the account with be a system user
+    group: 'jdoe'           # Alternate user-specific primary group
+    groups:                 # Additional user groups
       - 'admin'
       - 'developers'
-    shell: '/bin/bash'    # Default shell for the account
-    home: '/home/jdoe'    # Alternate home directory location for the account
-    generate_key: true    # Generate a new SSH key for the account
+    shell: '/bin/bash'      # Default shell for the account
+    home: '/home/jdoe'      # Alternate home directory location for the account
+    generate_key: true      # Generate a new SSH key for the account
+  # Decommissioned accounts
+  - username: 'bob'
+    uid: 1003
+    authorized: []
+    target_hosts: ['dev']
+    state: absent
 
-# The list of user accounts to be removed from the system
-users_retired:
-  - username: 'johndoe'   # Linux username
-    uid: 1000             # OPTIONAL User ID (not required, but useful for reference)
-  - username: 'janedoe'
-    uid: 1001
 ```
 
 ## Playbook example
@@ -86,15 +83,25 @@ users_retired:
       hosts: all
       roles:
         - { role: users,
-            users_current:
+            users:
               - username: 'sa'
                 authorized: ['ssh-rsa key_string']
                 name: 'System Administrator'
                 groups: ['admin']
+                target_hosts:
+                  - dev
+                  - stage
+                  - prod
               - username: 'ansible'
                 name: 'Ansible service account'
                 generate_key: true
                 authorized: []
+                # If target_hosts is not defined user will be created on all hosts
+              - username: 'johndoe'
+                name: 'John Doe'
+                generate_key: true
+                authorized: []
+                target_hosts: ['dev']
           }
     ```
 
