@@ -11,6 +11,7 @@
         groups: ['admin']
         password: ''
         authorized: []
+        state: 'present'
 
     users_group_list:
       - admin
