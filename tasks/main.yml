@@ -3,7 +3,7 @@
   set_fact:
      do_run: True
   with_subelements:
-    - "{{ users_current }}"
+    - "{{ users }}"
     - target_hosts
     - skip_missing: True
   when:
@@ -20,10 +20,10 @@
   group:
     name: "{{ item.username }}"
     gid: "{{ item.uid | default(omit) }}"
-    state: present
-  loop: "{{ users_current }}"
+    state: "{{ item.state }}"
+  loop: "{{ users }}"
   when:
-    - users_current is iterable and users_create_group_per_user
+    - users is iterable and users_create_group_per_user
     - do_run is defined or item.target_hosts is not defined
 
 - name: "Manage groups"
@@ -49,24 +49,24 @@
     generate_ssh_key: "{{ 'yes' if item.generate_key is defined and item.generate_key == true else 'no' }}"
     ssh_key_comment: "{{ item.username }}@{{ ansible_hostname }}"
     comment: "{{ item.name if item.name is defined else '' }}"
-    state: "{{ item.state | default('present') }}"
-  loop: "{{ users_current }}"
+    state: "{{ item.state }}"
+  loop: "{{ users }}"
   when:
-    - users_current is iterable
+    - users is iterable
     - do_run is defined or item.target_hosts is not defined
 
 - name: "Manage users SSH keys"
   authorized_key:
     user: "{{ item.0.username }}"
     key: "{{ item.1 }}"
-    state: "{{ item.state | default('present') }}"
     exclusive: "{{ item.0.exclusive | default('no') }}"
   with_subelements:
-    - "{{ users_current }}"
+    - "{{ users }}"
     - authorized
   when:
-    - users_current is iterable
-    - do_run is defined or item.target_hosts is not defined
+    - users is iterable
+    - do_run is defined or item.0.target_hosts is not defined
+    - item.0.state == 'present'
 
 - name: "Manage user's SSH keys only"
   authorized_key:
@@ -79,14 +79,15 @@
     - authorized
   when:
     - users_keys is iterable
-    - do_run is defined or item.target_hosts is not defined
+    - do_run is defined or item.0.target_hosts is not defined
 
 - name: "Secure the users SSH directory"
   file:
     dest: "{{ item.home if item.home is defined else '/home/%s' % item.username }}/.ssh"
     state: directory
     mode: 0700
-  loop: "{{ users_current }}"
+  loop: "{{ users }}"
   when:
-    - users_current is iterable
+    - users is iterable
     - do_run is defined or item.target_hosts is not defined
+    - item.state == 'present'
