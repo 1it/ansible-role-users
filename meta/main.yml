@@ -1,5 +1,7 @@
 galaxy_info:
+  role_name: users
   author: Ivan Tuzhilkin
+  namespace: 1it
   description: Ansible role for managing user accounts and authorized ssh-keys
   license: MIT
   min_ansible_version: '2.9.0'
@@ -19,6 +21,6 @@ galaxy_info:
   galaxy_tags:
     - system
     - users
-    - ssh-keys
+    - sshkeys
 
 dependencies: []
