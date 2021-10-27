@@ -40,7 +40,7 @@
     name: "{{ item.username }}"
     uid: "{{ item.uid | default(omit) }}"
     group: "{{ item.username if users_create_group_per_user else users_default_group }}"
-    groups: "{{ item.groups|join(',') | default('') }}"
+    groups: "{{ item.groups | default(omit) }}"
     shell: "{{ item.shell | default(users_default_shell) }}"
     createhome: "{{ 'yes' if users_create_homedir else 'no' }}"
     home: "{{ item.home | default('/home/%s' % item.username) }}"
