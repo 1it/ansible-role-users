@@ -17,6 +17,7 @@
     - skip_missing: True
   when:
     - users is iterable and users_create_group_per_user
+    - item.0.state == 'present'
     - inventory_hostname in groups[item.1] or item.1 == 'all'
 
 - name: "Manage groups"
@@ -93,4 +94,33 @@
   when:
     - users is iterable
     - users_create_homedir
+    - item.0.state == 'present'
     - inventory_hostname in groups[item.1] or item.1 == 'all'
+
+- name: "Clean up deleted user group"
+  group:
+    name: "{{ item.0.username }}"
+    gid: "{{ item.0.uid | default(omit) }}"
+    state: "{{ item.0.state }}"
+  with_subelements:
+    - "{{ users }}"
+    - target_hosts
+    - skip_missing: True
+  when:
+    - users is iterable and users_create_group_per_user
+    - item.0.state == 'absent'
+    - inventory_hostname in groups[item.1] or item.1 == 'all'
+
+- name: "Clean up deleted user directory"
+  file:
+    path: "{{ item.0.home if item.0.home is defined else '/home/%s' % item.0.username }}"
+    state: "{{ item.0.state }}"
+  with_subelements:
+    - "{{ users }}"
+    - target_hosts
+    - skip_missing: True
+  when:
+    - users is iterable and users_create_group_per_user
+    - item.0.state == 'absent'
+    - inventory_hostname in groups[item.1] or item.1 == 'all'
+    - delete_homedirs

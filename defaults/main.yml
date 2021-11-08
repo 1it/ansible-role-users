@@ -6,3 +6,4 @@ users_default_shell: '/bin/bash'
 users_default_group: 'users'
 users_create_group_per_user: true
 users_create_homedir: true
+delete_homedirs: false

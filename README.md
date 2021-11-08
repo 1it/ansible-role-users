@@ -1,11 +1,17 @@
 # Users Role for Ansible
-=========
 
-This role allows simple management of user accounts on a system.
+This role allows simple management of user accounts on a system.  
 Since `v0.2` it's possible to control where to create a certain user account - by setting the target host group (eg. inventory group, EC2 tag or other cloud label)
 
 
 # Changelog
+
+## 0.2.1 - 2021-11-08
+
+### Added:
+
+Remove user group  
+Remove user homedir - `delete_homedirs`
 
 ## 0.2 - 2021-11-08
 
@@ -59,6 +65,9 @@ users_create_homedir: true
 
 # The default groups list (to be created)
 users_group_list: []
+
+# Delete homedirs on user removal - disabled by default
+delete_homedirs: false
 ```
 
 ### User List Structure
