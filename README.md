@@ -2,6 +2,33 @@
 =========
 
 This role allows simple management of user accounts on a system.
+Since `v0.2` it's possible to control where to create a certain user account - by setting the target host group (eg. inventory group, EC2 tag or other cloud label)
+
+
+# Changelog
+
+## 0.2 - 2021-11-08
+
+### Changed:
+
+`target_hosts` now is mandatory. Please add `target_hosts: ['all']` to each user entry if you want to create this user on all hosts.
+
+### Removed:
+`users_keys` is removed due to compability issues. Probably it was not used at all.
+
+## 0.1 - 2021-10-27
+
+### Fixes:
+
+`groups` should be omited by default, other default values.
+
+### Added:
+
+`target_hosts` first try (not working).
+
+### Changed:
+
+`users.state` is mandatory.
 
 Requirements
 ------------
@@ -16,9 +43,6 @@ them are as follows:
 ```yaml
 # The list of user accounts to be added to the system
 users: []
-
-# The list of users keys to manage ssh authorized_keys only (e.g. for root)
-users_keys: []
 
 # The default shell given to all user accounts
 users_default_shell: '/bin/bash'
@@ -100,7 +124,9 @@ users:
                 generate_key: true
                 authorized: []
                 state: 'present'
-                # If target_hosts is not defined user will be created on all hosts
+                # Caveat - target_hosts must be defined otherwise user will not be created.
+                # Use ['all'] to create a user on all hosts by default.
+                target_hosts: ['all']
               - username: 'johndoe'
                 name: 'John Doe'
                 generate_key: true

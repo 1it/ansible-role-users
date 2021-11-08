@@ -1,14 +1,4 @@
 ---
-- name: "Determine target hosts"
-  set_fact:
-     do_run: True
-  with_subelements:
-    - "{{ users }}"
-    - target_hosts
-    - skip_missing: True
-  when:
-    - item.1 in group_names
-
 - name: "Manage global user's group"
   group:
     name: "{{ users_default_group }}"
@@ -18,13 +8,16 @@
 
 - name: "Manage per-user groups"
   group:
-    name: "{{ item.username }}"
-    gid: "{{ item.uid | default(omit) }}"
-    state: "{{ item.state }}"
-  loop: "{{ users }}"
+    name: "{{ item.0.username }}"
+    gid: "{{ item.0.uid | default(omit) }}"
+    state: "{{ item.0.state }}"
+  with_subelements:
+    - "{{ users }}"
+    - target_hosts
+    - skip_missing: True
   when:
     - users is iterable and users_create_group_per_user
-    - do_run is defined or item.target_hosts is not defined
+    - inventory_hostname in groups[item.1] or item.1 == 'all'
 
 - name: "Manage groups"
   group:
@@ -37,57 +30,67 @@
     
 - name: "Manage user accounts"
   user:
-    name: "{{ item.username }}"
-    uid: "{{ item.uid | default(omit) }}"
-    group: "{{ item.username if users_create_group_per_user else users_default_group }}"
-    groups: "{{ item.groups | default(omit) }}"
-    shell: "{{ item.shell | default(users_default_shell) }}"
+    name: "{{ item.0.username }}"
+    uid: "{{ item.0.uid | default(omit) }}"
+    group: "{{ item.0.username if users_create_group_per_user else users_default_group }}"
+    groups: "{{ item.0.groups | default(omit) }}"
+    shell: "{{ item.0.shell | default(users_default_shell) }}"
     createhome: "{{ 'yes' if users_create_homedir else 'no' }}"
-    home: "{{ item.home | default('/home/%s' % item.username) }}"
-    system: "{{ item.system | default('no')  }}"
-    password: "{{ item.password | default(omit) }}"
-    generate_ssh_key: "{{ item.generate_key | default('no') }}"
-    ssh_key_comment: "{{ item.username }}@{{ ansible_hostname }}"
-    comment: "{{ item.name | default('') }}"
-    state: "{{ item.state }}"
-  loop: "{{ users }}"
+    home: "{{ item.0.home | default('/home/%s' % item.0.username) }}"
+    system: "{{ item.0.system | default('no')  }}"
+    password: "{{ item.0.password | default(omit) }}"
+    generate_ssh_key: "{{ item.0.generate_key | default('no') }}"
+    ssh_key_comment: "{{ item.0.username }}@{{ ansible_hostname }}"
+    comment: "{{ item.0.name | default('') }}"
+    state: "{{ item.0.state }}"
+  with_subelements:
+    - "{{ users }}"
+    - target_hosts
+    - skip_missing: True
   when:
     - users is iterable
-    - do_run is defined or item.target_hosts is not defined
+    - inventory_hostname in groups[item.1] or item.1 == 'all'
 
 - name: "Manage users SSH keys"
   authorized_key:
     user: "{{ item.0.username }}"
-    key: "{{ item.1 }}"
+    key: "{{ item.0.authorized | list | join('\n') }}"
     exclusive: "{{ item.0.exclusive | default('no') }}"
   with_subelements:
     - "{{ users }}"
-    - authorized
+    - target_hosts
+    - skip_missing: True
   when:
     - users is iterable
-    - do_run is defined or item.0.target_hosts is not defined
+    - inventory_hostname in groups[item.1] or item.1 == 'all'
     - item.0.state == 'present'
-
-- name: "Manage user's SSH keys only"
-  authorized_key:
-    user: "{{ item.0.username }}"
-    key: "{{ item.1 }}"
-    state: 'present'
-    exclusive: "{{ item.0.exclusive | default('no') }}"
-  with_subelements:
-    - "{{ users_keys }}"
-    - authorized
-  when:
-    - users_keys is iterable
-    - do_run is defined or item.0.target_hosts is not defined
 
 - name: "Secure the users SSH directory"
   file:
-    dest: "{{ item.home if item.home is defined else '/home/%s' % item.username }}/.ssh"
+    dest: "{{ item.0.home if item.0.home is defined else '/home/%s' % item.0.username }}/.ssh"
     state: directory
     mode: 0700
-  loop: "{{ users }}"
+  with_subelements:
+    - "{{ users }}"
+    - target_hosts
+    - skip_missing: True
   when:
     - users is iterable
-    - do_run is defined or item.target_hosts is not defined
-    - item.state == 'present'
+    - inventory_hostname in groups[item.1] or item.1 == 'all'
+    - item.0.state == 'present'
+
+- name: "Ensure directory ownership"
+  file:
+    path: "{{ item.0.home if item.0.home is defined else '/home/%s' % item.0.username }}"
+    state: directory
+    owner: "{{ item.0.username }}"
+    group: "{{ item.0.username if users_create_group_per_user else users_default_group }}"
+    recurse: yes
+  with_subelements:
+    - "{{ users }}"
+    - target_hosts
+    - skip_missing: True
+  when:
+    - users is iterable
+    - users_create_homedir
+    - inventory_hostname in groups[item.1] or item.1 == 'all'

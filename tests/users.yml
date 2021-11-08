@@ -12,6 +12,7 @@
         password: ''
         authorized: []
         state: 'present'
+        target_hosts: ['all']
 
     users_group_list:
       - admin
