@@ -1,9 +1,23 @@
 ---
+# List of users to manage
+# See README.md for detailed structure documentation
 users: []
-users_keys: []
+
+# List of groups to create/manage
+# Example: [{ name: 'developers', state: 'present' }]
 users_group_list: []
+
+# Default shell for new users
 users_default_shell: '/bin/bash'
+
+# Default primary group for users (when not using per-user groups)
 users_default_group: 'users'
+
+# Create a unique group per user (recommended for security)
 users_create_group_per_user: true
+
+# Create home directories for users
 users_create_homedir: true
+
+# Remove home directories when users are deleted (use with caution)
 delete_homedirs: false

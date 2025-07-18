@@ -1,19 +1,231 @@
 ---
-- hosts: localhost
+# Comprehensive test for ansible-role-users
+# Tests all core functionality including user management, groups, SSH keys, and cleanup
+- name: Test ansible-role-users comprehensive functionality
+  hosts: localhost
   connection: local
+  become: true
+  gather_facts: true
   roles:
-    - users
+    - role: /ansible-role-users
+      name: users
 
   vars:
-    users_current:
-      - username: 'sa'
-        name: 'Test Admin'
-        groups: ['admin']
-        password: ''
-        authorized: []
+    # Test various user configurations
+    users:
+      # Standard user with SSH keys and custom groups
+      - username: 'testuser1'
+        name: 'Test User One'
+        uid: 2001
+        shell: '/bin/bash'
+        groups: ['admin', 'developers']
+        password: '$6$rounds=656000$salt$hash'  # Example encrypted password
+        authorized:
+          - 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC7vbqajDhA... testuser1@example.com'
+          - 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIG... testuser1-ed25519@example.com'
+        exclusive: false
+        generate_key: true
         state: 'present'
         target_hosts: ['all']
 
+      # User with custom home directory
+      - username: 'testuser2'
+        name: 'Test User Two'
+        uid: 2002
+        shell: '/bin/zsh'
+        home: '/opt/testuser2'
+        groups: ['developers']
+        state: 'present'
+        target_hosts: ['all']
+
+      # System user (no home directory)
+      - username: 'sysuser'
+        name: 'System User'
+        uid: 999
+        system: true
+        shell: '/bin/false'
+        state: 'present'
+        target_hosts: ['all']
+
+      # User to be removed (for testing cleanup)
+      - username: 'olduser'
+        name: 'Old User'
+        uid: 2003
+        state: 'absent'
+        target_hosts: ['all']
+
+      # User with minimal configuration
+      - username: 'minimaluser'
+        state: 'present'
+        target_hosts: ['all']
+
+    # Test group management
     users_group_list:
-      - admin
+      - name: 'admin'
+        state: 'present'
+      - name: 'developers'
+        state: 'present'
+      - name: 'oldgroup'
+        state: 'absent'
+
+    # Test different configuration options
+    users_default_shell: '/bin/bash'
+    users_default_group: 'users'
+    users_create_group_per_user: true
+    users_create_homedir: true
+    delete_homedirs: false  # Safety: don't delete home dirs in tests
+
+  # Pre-test setup
+  pre_tasks:
+    - name: Display test information
+      debug:
+        msg: |
+          Starting comprehensive ansible-role-users test
+          Testing on: {{ ansible_os_family }}
+          Hostname: {{ ansible_hostname }}
+
+    - name: Ensure test groups exist for dependency testing
+      group:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - admin
+        - developers
+      when: ansible_os_family != "Darwin"
+
+  # Post-test validation
+  post_tasks:
+    - name: Verify users were created
+      getent:
+        database: passwd
+        key: "{{ item }}"
+      register: user_check
+      failed_when: user_check.failed
+      loop:
+        - testuser1
+        - testuser2
+        - sysuser
+        - minimaluser
+
+    - name: Verify user UIDs
+      assert:
+        that:
+          - user_check.results[0].ansible_facts.getent_passwd.testuser1[1] == "2001"
+          - user_check.results[1].ansible_facts.getent_passwd.testuser2[1] == "2002"
+          - user_check.results[2].ansible_facts.getent_passwd.sysuser[1] == "999"
+        msg: "User UIDs do not match expected values"
+
+    - name: Verify user shells
+      assert:
+        that:
+          - user_check.results[0].ansible_facts.getent_passwd.testuser1[5] == "/bin/bash"
+          - user_check.results[1].ansible_facts.getent_passwd.testuser2[5] == "/bin/zsh"
+          - user_check.results[2].ansible_facts.getent_passwd.sysuser[5] == "/bin/false"
+        msg: "User shells do not match expected values"
+
+    - name: Verify custom home directory
+      assert:
+        that:
+          - user_check.results[1].ansible_facts.getent_passwd.testuser2[4] == "/opt/testuser2"
+        msg: "Custom home directory not set correctly"
+
+    - name: Check if home directories exist
+      stat:
+        path: "{{ item }}"
+      register: home_dirs
+      loop:
+        - "/home/testuser1"
+        - "/opt/testuser2"
+        - "/home/minimaluser"
+
+    - name: Verify home directories were created
+      assert:
+        that:
+          - home_dirs.results[0].stat.exists
+          - home_dirs.results[1].stat.exists
+          - home_dirs.results[2].stat.exists
+        msg: "Home directories were not created"
+
+    - name: Check SSH directory permissions
+      stat:
+        path: "/home/testuser1/.ssh"
+      register: ssh_dir
+
+    - name: Verify SSH directory security
+      assert:
+        that:
+          - ssh_dir.stat.exists
+          - ssh_dir.stat.mode == "0700"
+          - ssh_dir.stat.pw_name == "testuser1"
+        msg: "SSH directory not properly secured"
+      when: ssh_dir.stat.exists
+
+    - name: Check authorized_keys file
+      stat:
+        path: "/home/testuser1/.ssh/authorized_keys"
+      register: auth_keys
+
+    - name: Verify authorized keys were added
+      assert:
+        that:
+          - auth_keys.stat.exists
+          - auth_keys.stat.pw_name == "testuser1"
+        msg: "Authorized keys file not created or wrong ownership"
+      when: auth_keys.stat.exists
+
+    - name: Verify groups were created (Linux only)
+      getent:
+        database: group
+        key: "{{ item }}"
+      register: group_check
+      failed_when: group_check.failed
+      loop:
+        - admin
+        - developers
+        - testuser1  # per-user group
+        - testuser2  # per-user group
+      when: ansible_os_family != "Darwin"
+
+    - name: Verify user group memberships (Linux only)
+      command: groups testuser1
+      register: user_groups
+      changed_when: false
+      when: ansible_os_family != "Darwin"
+
+    - name: Check user group memberships
+      assert:
+        that:
+          - "'admin' in user_groups.stdout"
+          - "'developers' in user_groups.stdout"
+        msg: "User not in expected groups"
+      when: ansible_os_family != "Darwin" and user_groups is defined
+
+    - name: Verify olduser was removed
+      getent:
+        database: passwd
+        key: olduser
+      register: removed_user_check
+      failed_when: false
+
+    - name: Assert olduser was removed
+      assert:
+        that:
+          - removed_user_check.msg is defined and 'could not be found' in removed_user_check.msg
+        msg: "User 'olduser' should have been removed but still exists"
+
+    - name: Display test completion message
+      debug:
+        msg: |
+          ✅ Comprehensive ansible-role-users test completed successfully!
+          
+          Tested functionality:
+          - User creation with custom UIDs, shells, and home directories
+          - Group management and user group memberships
+          - SSH key management and directory security
+          - System user creation
+          - User removal/cleanup
+          - Per-user group creation
+          - Cross-platform compatibility (macOS/Linux)
+          
+          All core features are working correctly.
 

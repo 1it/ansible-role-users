@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  ansible-test:
+    build: .
+    container_name: ansible-role-users-test
+    volumes:
+      - .:/ansible-role-users
+    working_dir: /ansible-role-users
+    privileged: true  # Required for user management operations
+    environment:
+      - ANSIBLE_HOST_KEY_CHECKING=False
+      - ANSIBLE_STDOUT_CALLBACK=yaml
+    command: tail -f /dev/null  # Keep container running
+    networks:
+      - ansible-test-network
+
+networks:
+  ansible-test-network:
+    driver: bridge

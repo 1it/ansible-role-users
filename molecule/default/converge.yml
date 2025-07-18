@@ -1,0 +1,35 @@
+---
+- name: Converge
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars:
+    users:
+      - username: 'testuser1'
+        uid: 2001
+        name: 'Test User One'
+        authorized:
+          - 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC7vQjNKmM... test@example.com'
+        groups:
+          - 'sudo'
+        target_hosts: ['all']
+        state: 'present'
+      - username: 'testuser2'
+        uid: 2002
+        name: 'Test User Two'
+        shell: '/bin/bash'
+        generate_key: true
+        target_hosts: ['all']
+        state: 'present'
+    
+    users_group_list:
+      - name: 'developers'
+        state: 'present'
+      - name: 'testers'
+        state: 'present'
+
+  tasks:
+    - name: "Include users role"
+      include_role:
+        name: "users"

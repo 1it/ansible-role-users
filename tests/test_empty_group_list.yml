@@ -1,0 +1,48 @@
+---
+# Test case to validate fix for empty users_group_list issue
+# This test ensures that when users_group_list is empty (default),
+# no group named "[]" is created on the target system
+
+- hosts: localhost
+  connection: local
+  gather_facts: no
+  roles:
+    - role: /ansible-role-users
+      name: users
+
+  vars:
+    # Test with empty users_group_list (the problematic scenario)
+    users_group_list: []
+    
+    # Define a simple test user
+    users:
+      - username: 'testuser'
+        name: 'Test User'
+        uid: '9999'
+        state: 'present'
+        authorized: []
+
+  post_tasks:
+    # Verify that no group named "[]" was created
+    - name: "Check that no empty group was created"
+      group:
+        name: "[]"
+        state: absent
+      register: empty_group_check
+      failed_when: false
+      changed_when: false
+
+    - name: "Assert no empty group exists"
+      assert:
+        that:
+          - not empty_group_check.changed
+        fail_msg: "ERROR: Empty group '[]' was found on the system!"
+        success_msg: "SUCCESS: No empty group '[]' found - fix is working correctly"
+
+    # Clean up test user
+    - name: "Remove test user"
+      user:
+        name: 'testuser'
+        state: absent
+        remove: yes
+      failed_when: false

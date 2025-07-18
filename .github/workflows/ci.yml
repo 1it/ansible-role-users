@@ -1,0 +1,115 @@
+---
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  schedule:
+    # Run tests weekly on Sundays at 2 AM UTC
+    - cron: '0 2 * * 0'
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the codebase
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ansible-core yamllint ansible-lint
+
+      - name: Lint code
+        run: |
+          yamllint .
+          ansible-lint
+
+  molecule:
+    name: Molecule
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        distro:
+          - ubuntu2204
+          - ubuntu2004
+          - debian12
+          - debian11
+          - centos8
+          - fedora38
+
+    steps:
+      - name: Check out the codebase
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ansible-core molecule[docker] docker
+
+      - name: Run Molecule tests
+        run: molecule test
+        env:
+          PY_COLORS: '1'
+          ANSIBLE_FORCE_COLOR: '1'
+          MOLECULE_DISTRO: ${{ matrix.distro }}
+
+  custom-tests:
+    name: Custom Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the codebase
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install Ansible
+        run: |
+          python -m pip install --upgrade pip
+          pip install ansible-core
+
+      - name: Run comprehensive tests
+        run: |
+          ansible-playbook -i tests/inventory tests/test_comprehensive_groups.yml
+
+      - name: Run empty group test
+        run: |
+          chmod +x tests/run_empty_group_test.sh
+          ./tests/run_empty_group_test.sh
+
+  macos-test:
+    name: macOS Compatibility
+    runs-on: macos-latest
+    steps:
+      - name: Check out the codebase
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install Ansible
+        run: |
+          python -m pip install --upgrade pip
+          pip install ansible-core
+
+      - name: Run macOS compatibility test
+        run: |
+          ansible-playbook -i tests/inventory tests/test_comprehensive_groups.yml
