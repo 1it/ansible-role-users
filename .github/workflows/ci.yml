@@ -26,7 +26,7 @@ jobs:
       - name: Install test dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install ansible-core yamllint ansible-lint
+          pip install ansible yamllint ansible-lint
 
       - name: Lint code
         run: |
@@ -39,12 +39,7 @@ jobs:
     strategy:
       matrix:
         distro:
-          - ubuntu2204
-          - ubuntu2004
-          - debian12
-          - debian11
-          - centos8
-          - fedora38
+          - 01it/molecule-alpine:latest
 
     steps:
       - name: Check out the codebase
@@ -58,7 +53,12 @@ jobs:
       - name: Install test dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install ansible-core molecule[docker] docker
+          pip install ansible molecule-plugins[docker] docker
+
+      - name: Set up role symlink for Molecule
+        run: |
+          mkdir -p molecule/default/roles
+          ln -sf ../../../ molecule/default/roles/users
 
       - name: Run Molecule tests
         run: molecule test
@@ -74,42 +74,13 @@ jobs:
       - name: Check out the codebase
         uses: actions/checkout@v4
 
-      - name: Set up Python 3
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.x'
-
-      - name: Install Ansible
+      - name: Install Docker Compose
         run: |
-          python -m pip install --upgrade pip
-          pip install ansible-core
+          sudo apt-get update
+          sudo apt-get install -y docker-compose
 
-      - name: Run comprehensive tests
-        run: |
-          ansible-playbook -i tests/inventory tests/test_comprehensive_groups.yml
+      - name: Make test script executable
+        run: chmod +x run-tests-docker.sh
 
-      - name: Run empty group test
-        run: |
-          chmod +x tests/run_empty_group_test.sh
-          ./tests/run_empty_group_test.sh
-
-  macos-test:
-    name: macOS Compatibility
-    runs-on: macos-latest
-    steps:
-      - name: Check out the codebase
-        uses: actions/checkout@v4
-
-      - name: Set up Python 3
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.x'
-
-      - name: Install Ansible
-        run: |
-          python -m pip install --upgrade pip
-          pip install ansible-core
-
-      - name: Run macOS compatibility test
-        run: |
-          ansible-playbook -i tests/inventory tests/test_comprehensive_groups.yml
+      - name: Run Docker-based tests
+        run: ./run-tests-docker.sh

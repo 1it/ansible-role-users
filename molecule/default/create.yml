@@ -5,25 +5,61 @@
   gather_facts: false
   # no_log: "{{ molecule_no_log }}"
   tasks:
-    # TODO: Developer must implement and populate 'server' variable
+    - name: Create docker containers
+      community.docker.docker_container:
+        name: "{{ item.name }}"
+        image: "{{ item.image | regex_replace('\\{\\{.*\\}\\}', '01it/molecule-alpine:latest') }}"
+        state: started
+        recreate: false
+        log_driver: json-file
+        command: "{{ item.command | default('sleep infinity') }}"
+        privileged: "{{ item.privileged | default(omit) }}"
+        volumes: "{{ item.volumes | default(omit) }}"
+        tmpfs: "{{ item.tmpfs | default(omit) }}"
+        capabilities: "{{ item.capabilities | default(omit) }}"
+        cgroupns_mode: "{{ item.cgroupns_mode | default(omit) }}"
+        published_ports: "{{ item.published_ports | default(omit) }}"
+        ulimits: "{{ item.ulimits | default(omit) }}"
+        networks: "{{ item.networks | default(omit) }}"
+        env: "{{ item.env | default(omit) }}"
+        restart_policy: "{{ item.restart_policy | default('unless-stopped') }}"
+        memory: "{{ item.memory | default(omit) }}"
+        cpus: "{{ item.cpus | default(omit) }}"
+      register: server
+      with_items: "{{ molecule_yml.platforms }}"
+      async: 7200
+      poll: 0
+
+    - name: Wait for instance(s) creation to complete
+      ansible.builtin.async_status:
+        jid: "{{ item.ansible_job_id }}"
+      register: docker_jobs
+      until: docker_jobs.finished
+      retries: 300
+      delay: 2
+      with_items: "{{ server.results }}"
 
     - name: Create instance config
       when: server.changed | default(false) | bool  # noqa no-handler
       block:
         - name: Populate instance config dict  # noqa jinja
           ansible.builtin.set_fact:
-            instance_conf_dict: {}
-            # instance': "{{ }}",
-            # address': "{{ }}",
-            # user': "{{ }}",
-            # port': "{{ }}",
-            # 'identity_file': "{{ }}", }
-          with_items: "{{ server.results }}"
+            instance_conf_dict:
+              instance: "{{ item.container.Name }}"
+              address: "{{ item.container.Name }}"
+              user: root
+              port: 22
+              identity_file: ""
+              docker_networks: "{{ item.container.NetworkSettings.Networks.keys() | list }}"
+          with_items: "{{ docker_jobs.results }}"
           register: instance_config_dict
 
         - name: Convert instance config dict to a list
           ansible.builtin.set_fact:
-            instance_conf: "{{ instance_config_dict.results | map(attribute='ansible_facts.instance_conf_dict') | list }}"
+            instance_conf: >
+              {{ instance_config_dict.results |
+                 map(attribute='ansible_facts.instance_conf_dict') |
+                 list }}
 
         - name: Dump instance config
           ansible.builtin.copy:

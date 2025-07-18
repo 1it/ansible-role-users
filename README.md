@@ -262,7 +262,7 @@ This role includes comprehensive testing using [Molecule](https://molecule.readt
 ### Prerequisites
 
 ```bash
-pip install molecule[docker] ansible-core
+pip install molecule-plugin[docker] ansible-core
 ```
 
 ### Running Tests
@@ -313,7 +313,7 @@ ansible-playbook -i tests/inventory tests/test_comprehensive_groups.yml
 
 ## Changelog
 
-### v1.0.0 (2024)
+### v0.3.0 (2025)
 
 #### Added
 - ✅ Modern Ansible support (2.12+)

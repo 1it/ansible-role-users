@@ -6,14 +6,11 @@
 - hosts: localhost
   connection: local
   gather_facts: no
-  roles:
-    - role: /ansible-role-users
-      name: users
 
   vars:
     # Test with empty users_group_list (the problematic scenario)
     users_group_list: []
-    
+
     # Define a simple test user
     users:
       - username: 'testuser'
@@ -21,6 +18,10 @@
         uid: '9999'
         state: 'present'
         authorized: []
+  tasks:
+    - name: "Run role with empty users_group_list"
+      include_role:
+        name: users
 
   post_tasks:
     # Verify that no group named "[]" was created

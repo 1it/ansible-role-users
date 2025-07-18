@@ -1,11 +1,12 @@
+---
 galaxy_info:
   role_name: users
   author: Ivan Tuzhilkin
-  namespace: 1it
+  namespace: ansible-1it
   description: Modern Ansible role for managing user accounts and SSH keys with cross-platform support
   license: MIT
   min_ansible_version: '2.12.0'
-  company: 1it
+  company: c1it
   issue_tracker_url: https://github.com/1it/ansible-role-users/issues
   github_branch: master
 
@@ -36,7 +37,7 @@ galaxy_info:
         - '15.5'
     - name: ArchLinux
       versions:
-        - any
+        - all
 
   galaxy_tags:
     - system

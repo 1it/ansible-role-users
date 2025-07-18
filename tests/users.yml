@@ -7,8 +7,7 @@
   become: true
   gather_facts: true
   roles:
-    - role: /ansible-role-users
-      name: users
+    - role: users
 
   vars:
     # Test various user configurations
@@ -217,7 +216,7 @@
       debug:
         msg: |
           ✅ Comprehensive ansible-role-users test completed successfully!
-          
+
           Tested functionality:
           - User creation with custom UIDs, shells, and home directories
           - Group management and user group memberships
@@ -226,6 +225,5 @@
           - User removal/cleanup
           - Per-user group creation
           - Cross-platform compatibility (macOS/Linux)
-          
-          All core features are working correctly.
 
+          All core features are working correctly.

@@ -20,16 +20,16 @@ sleep 3
 
 # Run the comprehensive test
 echo "🧪 Running comprehensive user management tests..."
-docker-compose exec ansible-test ansible-playbook -i tests/inventory tests/users.yml -v
+docker-compose exec -T ansible-test ansible-playbook -i tests/inventory tests/users.yml -v
 
 # Run additional specific tests
 echo "🔍 Running specific functionality tests..."
-docker-compose exec ansible-test ansible-playbook -i tests/inventory tests/test_comprehensive_groups.yml -v
-docker-compose exec ansible-test ansible-playbook -i tests/inventory tests/test_empty_group_list.yml -v
+docker-compose exec -T ansible-test ansible-playbook -i tests/inventory tests/test_comprehensive_groups.yml -v
+docker-compose exec -T ansible-test ansible-playbook -i tests/inventory tests/test_empty_group_list.yml -v
 
 # Run ansible-lint if available
 echo "📋 Running ansible-lint checks..."
-docker-compose exec ansible-test bash -c "pip3 install ansible-lint && ansible-lint tasks/main.yml" || echo "⚠️  ansible-lint not available or failed"
+docker-compose exec -T ansible-test bash -c "pip3 install ansible-lint && ansible-lint tasks/main.yml" || echo "⚠️  ansible-lint not available or failed"
 
 # Cleanup
 echo "🧹 Cleaning up..."

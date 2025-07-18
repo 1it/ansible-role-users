@@ -5,20 +5,43 @@
   gather_facts: false
   # no_log: "{{ molecule_no_log }}"
   tasks:
-    # Developer must implement.
+    - name: Check for instance config file
+      ansible.builtin.stat:
+        path: "{{ molecule_instance_config }}"
+      register: molecule_instance_config_stat
 
-    # Mandatory configuration for Molecule to function.
+    - name: Read instance config
+      ansible.builtin.slurp:
+        src: "{{ molecule_instance_config }}"
+      register: instance_conf_file
+      when: molecule_instance_config_stat.stat.exists
 
-    - name: Populate instance config
+    - name: Parse instance config
       ansible.builtin.set_fact:
-        instance_conf: {}
+        instance_conf: "{{ (instance_conf_file.content | b64decode | from_yaml) if molecule_instance_config_stat.stat.exists else [] }}"
 
-    - name: Dump instance config
-      ansible.builtin.copy:
-        content: |
-          # Molecule managed
+    - name: Destroy docker containers
+      community.docker.docker_container:
+        name: "{{ item.instance }}"
+        state: absent
+        force_kill: true
+      register: server
+      with_items: "{{ instance_conf }}"
+      when: instance_conf | length > 0
+      async: 7200
+      poll: 0
 
-          {{ instance_conf | to_json | from_json | to_yaml }}
-        dest: "{{ molecule_instance_config }}"
-        mode: "0600"
-      when: server.changed | default(false) | bool  # noqa no-handler
+    - name: Wait for instance(s) deletion to complete
+      ansible.builtin.async_status:
+        jid: "{{ item.ansible_job_id }}"
+      register: docker_jobs
+      until: docker_jobs.finished
+      retries: 300
+      delay: 2
+      with_items: "{{ server.results }}"
+      when: server.results is defined
+
+    - name: Remove instance config
+      ansible.builtin.file:
+        path: "{{ molecule_instance_config }}"
+        state: absent

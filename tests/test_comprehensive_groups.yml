@@ -5,12 +5,11 @@
 - hosts: localhost
   connection: local
   gather_facts: yes
-  
   tasks:
     # Test 1: Empty users_group_list (the bug scenario)
     - name: "Test 1: Run role with empty users_group_list"
       include_role:
-        name: /ansible-role-users
+        name: users
       vars:
         users_group_list: []
         users: []
@@ -30,7 +29,7 @@
     # Test 2: Normal users_group_list with actual groups (Linux only)
     - name: "Test 2: Run role with actual groups"
       include_role:
-        name: /ansible-role-users
+        name: users
       vars:
         users_group_list:
           - name: testgroup1
@@ -60,7 +59,7 @@
     # Test 2 alternative for macOS: Just verify the role runs without errors
     - name: "Test 2 (macOS): Verify role runs with groups without creating them"
       include_role:
-        name: /ansible-role-users
+        name: users
       vars:
         users_group_list:
           - name: testgroup1

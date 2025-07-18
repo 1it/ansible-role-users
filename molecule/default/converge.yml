@@ -12,7 +12,7 @@
         authorized:
           - 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC7vQjNKmM... test@example.com'
         groups:
-          - 'sudo'
+          - 'developers'
         target_hosts: ['all']
         state: 'present'
       - username: 'testuser2'
@@ -22,7 +22,7 @@
         generate_key: true
         target_hosts: ['all']
         state: 'present'
-    
+
     users_group_list:
       - name: 'developers'
         state: 'present'
@@ -30,6 +30,6 @@
         state: 'present'
 
   tasks:
-    - name: "Include users role"
+    - name: Include users role
       include_role:
-        name: "users"
+        name: users
