@@ -1,5 +1,6 @@
 ---
-- hosts: all
+- name: Apply users role
+  hosts: all
   roles:
-    - users
-
+    - role: .
+      name: users

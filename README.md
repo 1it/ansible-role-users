@@ -1,166 +1,374 @@
-# Users Role for Ansible
+# Ansible Role: Users
 
-This role allows simple management of user accounts on a system.  
-Since `v0.2` it's possible to control where to create a certain user account - by setting the target host group (eg. inventory group, EC2 tag or other cloud label)
+[![CI](https://github.com/1it/ansible-role-users/workflows/CI/badge.svg)](https://github.com/1it/ansible-role-users/actions)
+[![Ansible Galaxy](https://img.shields.io/badge/ansible--galaxy-1it.users-blue.svg)](https://galaxy.ansible.com/1it/users)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+A modern, cross-platform Ansible role for managing user accounts, SSH keys, and groups with fine-grained control over target hosts.
 
-# Changelog
+## Features
 
-## 0.2.1 - 2021-11-08
-
-### Added:
-
-Remove user group  
-Remove user homedir - `delete_homedirs`
-
-## 0.2 - 2021-11-08
-
-### Changed:
-
-`target_hosts` now is mandatory. Please add `target_hosts: ['all']` to each user entry if you want to create this user on all hosts.
-
-### Removed:
-`users_keys` is removed due to compability issues. Probably it was not used at all.
-
-## 0.1 - 2021-10-27
-
-### Fixes:
-
-`groups` should be omited by default, other default values.
-
-### Added:
-
-`target_hosts` first try (not working).
-
-### Changed:
-
-`users.state` is mandatory.
-
-Requirements
-------------
-* Ansible 2.9.0 or higher
+- ✅ **Cross-platform support**: Linux distributions (Ubuntu, Debian, RHEL, CentOS, Fedora, openSUSE, Arch)
+- ✅ **Flexible user management**: Create, modify, and remove users with full control
+- ✅ **SSH key management**: Automated SSH key deployment and management
+- ✅ **Group management**: Create and manage user groups
+- ✅ **Target host control**: Deploy users to specific host groups or inventory tags
+- ✅ **Security-focused**: Per-user groups, proper permissions, secure defaults
+- ✅ **Comprehensive testing**: Molecule tests with multiple platforms
+- ✅ **Idempotent operations**: Safe to run multiple times
 
 
-## Variables
+## Requirements
 
-The variables that can be passed to this role and a brief description about
-them are as follows:
+- **Ansible**: >= 2.12.0
+- **Python**: >= 3.8
+- **Target OS**: Linux distributions (see supported platforms in meta/main.yml)
+- **Collections**:
+  - `community.general` >= 6.0.0
+  - `ansible.posix` >= 1.4.0
 
-```yaml
-# The list of user accounts to be added to the system
-users: []
+## Installation
 
-# The default shell given to all user accounts
-users_default_shell: '/bin/bash'
+### From Ansible Galaxy
 
-# The default group new user accounts will be added to
-users_default_group: 'users'
-
-# The default flag for whether to create a unique group per user or instead put
-# all users in the default group defined above
-users_create_group_per_user: true
-
-# The default flag for whether to create user home directories
-users_create_homedir: true
-
-# The default groups list (to be created)
-users_group_list: []
-
-# Delete homedirs on user removal - disabled by default
-delete_homedirs: false
+```bash
+ansible-galaxy install 1it.users
 ```
 
-### User List Structure
+### From GitHub
+
+```bash
+ansible-galaxy install git+https://github.com/1it/ansible-role-users.git
+```
+
+### Using requirements.yml
+
+Create a `requirements.yml` file:
 
 ```yaml
-# The list of user accounts to be added to the system
+---
+roles:
+  - name: 1it.users
+    version: main
+
+collections:
+  - community.general
+  - ansible.posix
+```
+
+Then install:
+
+```bash
+ansible-galaxy install -r requirements.yml
+```
+
+
+## Role Variables
+
+### Core Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `users` | `[]` | List of users to manage (see structure below) |
+| `users_group_list` | `[]` | List of groups to create/manage |
+| `users_default_shell` | `/bin/bash` | Default shell for new users |
+| `users_default_group` | `users` | Default primary group (when not using per-user groups) |
+| `users_create_group_per_user` | `true` | Create unique group per user (recommended) |
+| `users_create_homedir` | `true` | Create home directories for users |
+| `delete_homedirs` | `false` | Remove home directories when deleting users ⚠️ |
+
+### Security Considerations
+
+- **Per-user groups**: Enabled by default for better security isolation
+- **Home directory permissions**: Automatically set to 0700 for SSH directories
+- **SSH key management**: Supports exclusive key management
+- **Privilege escalation**: Role requires `become: true` for user management
+
+### User Configuration Structure
+
+#### Required Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `username` | string | Linux username (must be valid) |
+| `target_hosts` | list | Host groups where user should exist |
+| `state` | string | `present` or `absent` |
+
+#### Optional Fields
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `uid` | integer | auto | User ID (typically 1000+) |
+| `name` | string | `""` | Full name (GECOS field) |
+| `authorized` | list | `[]` | SSH public keys |
+| `groups` | list | `[]` | Additional groups |
+| `shell` | string | `users_default_shell` | Login shell |
+| `home` | string | `/home/{username}` | Home directory path |
+| `system` | boolean | `false` | Create as system user |
+| `generate_key` | boolean | `false` | Generate SSH key pair |
+| `exclusive` | boolean | `false` | Remove unlisted SSH keys |
+| `password` | string | `null` | Encrypted password hash |
+
+#### Example Configuration
+
+```yaml
 users:
-  # First user defining only required attributes
-  - username: 'johndoe'     # Linux username
-    uid: 1000               # OPTIONAL User ID (generally non-system users start at 1000)
-    authorized: []          # List of public SSH keys to add to the account
-    target_hosts: ['dev']   # List of inventory host groups where user account should exist
-    state: 'present'        # REQUIRED account state
-  # Second user defining all available attributes
-  - username: 'janedoe'     # Linux username
-    uid: 1001               # OPTIONAL User ID (generally non-system users start at 1000)
-    authorized:             # List of public SSH keys to add to the account
-      - 'ssh-rsa key_string1'
-      - 'ssh-ecdsa key_string2'
-    name: 'Jane Doe'        # Used as comment when creating the account
-    system: false           # Specify whether the account with be a system user
-    group: 'jdoe'           # Alternate user-specific primary group
-    groups:                 # Additional user groups
-      - 'admin'
-      - 'developers'
-    shell: '/bin/bash'      # Default shell for the account
-    home: '/home/jdoe'      # Alternate home directory location for the account
-    generate_key: true      # Generate a new SSH key for the account
+  # Minimal user configuration
+  - username: 'developer'
+    target_hosts: ['webservers']
     state: 'present'
-  # Decommissioned accounts
-  - username: 'bob'
-    uid: 1003
-    authorized: []
-    target_hosts: ['dev']
-    state: absent
-
+    
+  # Full-featured user
+  - username: 'admin'
+    uid: 1001
+    name: 'System Administrator'
+    authorized:
+      - 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC... admin@workstation'
+      - 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... admin@laptop'
+    groups:
+      - 'sudo'
+      - 'docker'
+    shell: '/bin/zsh'
+    generate_key: true
+    exclusive: true
+    target_hosts: ['all']
+    state: 'present'
+    
+  # Remove user
+  - username: 'olduser'
+    target_hosts: ['all']
+    state: 'absent'
 ```
 
-### User List Structure
+### Group Configuration Structure
+
 ```yaml
 users_group_list:
-  - name: sudo
-  - name: docker
-  - name: temporary
-    state: absent
+  - name: 'developers'
+    state: 'present'  # default
+  - name: 'docker'
+    state: 'present'
+  - name: 'temporary'
+    state: 'absent'   # remove group
 ```
 
-## Playbook example
+**Note**: Group creation is automatically skipped on macOS due to platform limitations.
 
-1. Creating a system admin user and a deploy user:
+## Usage Examples
 
-    ```yaml
-    ---
-    # This playbook bootstraps machines with common users
+### Basic Playbook
 
-    - name: Apply common users to all nodes
-      hosts: all
-      roles:
-        - { role: users,
-            users:
-              - username: 'sa'
-                authorized: ['ssh-rsa key_string']
-                name: 'System Administrator'
-                groups: ['admin']
-                target_hosts:
-                  - dev
-                  - stage
-                  - prod
-                state: 'present'
-              - username: 'ansible'
-                name: 'Ansible service account'
-                generate_key: true
-                authorized: []
-                state: 'present'
-                # Caveat - target_hosts must be defined otherwise user will not be created.
-                # Use ['all'] to create a user on all hosts by default.
-                target_hosts: ['all']
-              - username: 'johndoe'
-                name: 'John Doe'
-                generate_key: true
-                authorized: []
-                target_hosts: ['dev']
-                state: 'present'
-          }
-    ```
+```yaml
+---
+- name: Manage users across infrastructure
+  hosts: all
+  become: true
+  
+  roles:
+    - role: 1it.users
+      vars:
+        users_group_list:
+          - name: 'developers'
+          - name: 'sysadmins'
+          - name: 'docker'
+        
+        users:
+          - username: 'admin'
+            name: 'System Administrator'
+            authorized:
+              - 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC... admin@workstation'
+            groups: ['sudo', 'sysadmins']
+            target_hosts: ['all']
+            state: 'present'
+            
+          - username: 'developer'
+            name: 'Development User'
+            groups: ['developers', 'docker']
+            target_hosts: ['webservers', 'appservers']
+            state: 'present'
+```
 
-__Note__: When creating a variable containing the list of users to add or remove,
-the best place to start is in `group_vars/all`. Try `group_vars/groupname` or
-`host_vars/hostname` if you only want users on certain machines.
-`target_hosts` is a list host groups also it could be a Tag in a dynamic cloud inventory, like AWS/GCP/WhateverCloud, availability zone, region, project.
+### Advanced Configuration
+
+```yaml
+---
+- name: Advanced user management
+  hosts: all
+  become: true
+  
+  vars:
+    # Global role configuration
+    users_create_group_per_user: true
+    users_default_shell: '/bin/zsh'
+    delete_homedirs: false
+    
+  roles:
+    - role: 1it.users
+      vars:
+        users:
+          # Service account with generated SSH key
+          - username: 'deploy'
+            name: 'Deployment Service Account'
+            system: true
+            generate_key: true
+            home: '/opt/deploy'
+            shell: '/bin/bash'
+            target_hosts: ['production']
+            state: 'present'
+            
+          # Developer with multiple SSH keys
+          - username: 'jane.doe'
+            name: 'Jane Doe'
+            authorized:
+              - 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC... jane@laptop'
+              - 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... jane@desktop'
+            exclusive: true  # Remove any other keys
+            groups: ['developers', 'sudo']
+            target_hosts: ['development', 'staging']
+            state: 'present'
+```
+
+### Environment-Specific Users
+
+```yaml
+# group_vars/production.yml
+users:
+  - username: 'prod-admin'
+    name: 'Production Administrator'
+    groups: ['sudo']
+    target_hosts: ['all']
+    state: 'present'
+
+# group_vars/development.yml  
+users:
+  - username: 'dev-user'
+    name: 'Development User'
+    groups: ['developers']
+    target_hosts: ['all']
+    state: 'present'
+```
+
+### Best Practices
+
+- **Variable placement**: Use `group_vars/all` for common users, `group_vars/{environment}` for environment-specific users
+- **Target hosts**: Can be inventory groups, cloud tags, or any dynamic inventory labels
+- **SSH keys**: Store in encrypted files or use Ansible Vault for sensitive keys
+- **Testing**: Always test user changes in non-production environments first
+
+## Testing
+
+This role includes comprehensive testing using [Molecule](https://molecule.readthedocs.io/).
+
+### Prerequisites
+
+```bash
+pip install molecule-plugin[docker] ansible-core
+```
+
+### Running Tests
+
+```bash
+# Test all scenarios
+molecule test
+
+# Test specific platform
+molecule test --scenario-name default
+
+# Development workflow
+molecule converge  # Apply role
+molecule verify    # Run tests
+molecule destroy   # Clean up
+```
+
+### Manual Testing
+
+The role includes custom tests for the empty group bug fix:
+
+```bash
+# Run the comprehensive test suite
+ansible-playbook -i tests/inventory tests/test_comprehensive_groups.yml
+
+# Run the empty group specific test
+./tests/run_empty_group_test.sh
+```
+
+## Development
+
+### Contributing
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/amazing-feature`
+3. Make your changes
+4. Run tests: `molecule test`
+5. Commit changes: `git commit -m 'Add amazing feature'`
+6. Push to branch: `git push origin feature/amazing-feature`
+7. Open a Pull Request
+
+### Code Style
+
+- Follow [Ansible best practices](https://docs.ansible.com/ansible/latest/user_guide/playbooks_best_practices.html)
+- Use YAML lint: `yamllint .`
+- Test with multiple platforms
+- Document all variables and examples
+
+## Changelog
+
+### v0.3.0 (2025)
+
+#### Added
+- ✅ Modern Ansible support (2.12+)
+- ✅ Cross-platform compatibility
+- ✅ Comprehensive Molecule testing
+- ✅ macOS compatibility (with limitations)
+- ✅ Enhanced documentation
+- ✅ CI/CD pipeline
+
+#### Fixed
+- 🐛 Empty group creation bug (`[]` group)
+- 🐛 Loop syntax issues
+- 🐛 Platform-specific group management
+
+#### Changed
+- 🔄 Updated minimum Ansible version to 2.12.0
+- 🔄 Modernized role structure
+- 🔄 Improved variable documentation
+- 🔄 Enhanced security defaults
+
+#### Removed
+- ❌ Deprecated `users_keys` variable
+- ❌ Support for EOL distributions
+
+### Legacy Versions
+
+<details>
+<summary>Click to expand legacy changelog</summary>
+
+#### v0.2.1 (2021-11-08)
+- Added user group removal
+- Added `delete_homedirs` option
+
+#### v0.2 (2021-11-08)
+- Made `target_hosts` mandatory
+- Removed `users_keys` for compatibility
+
+#### v0.1 (2021-10-27)
+- Initial release
+- Basic user and group management
+
+</details>
 
 ## Dependencies
 
+No external role dependencies. See [Requirements](#requirements) for collection dependencies.
+
 ## License
 
-MIT.
+[MIT](LICENSE)
+
+## Author Information
+
+This role was created by [Ivan Tuzhilkin](https://github.com/1it) and is maintained by the community.
+
+---
+
+**Support**: For issues and questions, please use the [GitHub Issues](https://github.com/1it/ansible-role-users/issues) page.

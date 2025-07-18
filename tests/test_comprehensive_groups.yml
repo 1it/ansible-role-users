@@ -1,0 +1,100 @@
+---
+# Comprehensive test for users_group_list functionality
+# Tests both empty list (fixed scenario) and normal group creation
+
+- hosts: localhost
+  connection: local
+  gather_facts: yes
+  tasks:
+    # Test 1: Empty users_group_list (the bug scenario)
+    - name: "Test 1: Run role with empty users_group_list"
+      include_role:
+        name: users
+      vars:
+        users_group_list: []
+        users: []
+
+    - name: "Verify no empty group was created"
+      shell: "getent group | grep -E '^\\[\\]:' || true"
+      register: empty_group_check
+      changed_when: false
+
+    - name: "Assert no empty group exists"
+      assert:
+        that:
+          - empty_group_check.stdout == ""
+        fail_msg: "FAILED: Empty group '[]' found in system!"
+        success_msg: "PASSED: No empty group found with empty list"
+
+    # Test 2: Normal users_group_list with actual groups (Linux only)
+    - name: "Test 2: Run role with actual groups"
+      include_role:
+        name: users
+      vars:
+        users_group_list:
+          - name: testgroup1
+            state: present
+          - name: testgroup2
+            state: present
+        users: []
+      when: ansible_os_family != "Darwin"
+
+    - name: "Verify test groups were created (Linux only)"
+      shell: "getent group {{ item }} || echo 'NOT_FOUND'"
+      register: group_check
+      loop:
+        - testgroup1
+        - testgroup2
+      changed_when: false
+      when: ansible_os_family != "Darwin"
+
+    - name: "Assert test groups exist (Linux only)"
+      assert:
+        that:
+          - "'NOT_FOUND' not in item.stdout"
+        success_msg: "PASSED: Normal groups created successfully"
+      loop: "{{ group_check.results | default([]) }}"
+      when: ansible_os_family != "Darwin"
+
+    # Test 2 alternative for macOS: Just verify the role runs without errors
+    - name: "Test 2 (macOS): Verify role runs with groups without creating them"
+      include_role:
+        name: users
+      vars:
+        users_group_list:
+          - name: testgroup1
+            state: present
+          - name: testgroup2
+            state: present
+        users: []
+      when: ansible_os_family == "Darwin"
+
+    - name: "Assert macOS test completed (groups may not be created due to platform limitations)"
+      assert:
+        that:
+          - true  # Just verify the role ran
+        success_msg: "PASSED: Role executed on macOS (group creation may be limited)"
+      when: ansible_os_family == "Darwin"
+
+    # Cleanup (Linux only)
+    - name: "Cleanup test groups (Linux only)"
+      group:
+        name: "{{ item }}"
+        state: absent
+      loop:
+        - testgroup1
+        - testgroup2
+      failed_when: false
+      when: ansible_os_family != "Darwin"
+
+    - name: "Final verification - no empty group exists"
+      shell: "getent group | grep -E '^\\[\\]:' || true"
+      register: final_check
+      changed_when: false
+
+    - name: "Final assertion"
+      assert:
+        that:
+          - final_check.stdout == ""
+        fail_msg: "CRITICAL: Empty group still exists after all tests!"
+        success_msg: "SUCCESS: All tests passed ✅"

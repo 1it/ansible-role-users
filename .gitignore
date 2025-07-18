@@ -1,0 +1,4 @@
+.ansible
+.tmp
+*.log
+molecule/default/roles/

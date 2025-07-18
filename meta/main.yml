@@ -1,26 +1,52 @@
+---
 galaxy_info:
   role_name: users
   author: Ivan Tuzhilkin
-  namespace: 1it
-  description: Ansible role for managing user accounts and authorized ssh-keys
+  namespace: ansible-1it
+  description: Modern Ansible role for managing user accounts and SSH keys with cross-platform support
   license: MIT
-  min_ansible_version: '2.9.0'
+  min_ansible_version: '2.12.0'
+  company: c1it
+  issue_tracker_url: https://github.com/1it/ansible-role-users/issues
+  github_branch: master
 
   platforms:
     - name: Ubuntu
       versions:
-        - xenial
         - bionic
         - focal
+        - jammy
+        - noble
     - name: Debian
       versions:
-        - stretch
         - buster
         - bullseye
+        - bookworm
+    - name: EL
+      versions:
+        - '8'
+        - '9'
+    - name: Fedora
+      versions:
+        - '38'
+        - '39'
+        - '40'
+    - name: opensuse
+      versions:
+        - '15.4'
+        - '15.5'
+    - name: ArchLinux
+      versions:
+        - all
 
   galaxy_tags:
     - system
     - users
-    - sshkeys
+    - ssh
+    - security
+    - administration
+    - accounts
+    - linux
+    - unix
 
 dependencies: []

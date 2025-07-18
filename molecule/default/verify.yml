@@ -1,0 +1,75 @@
+---
+- name: Verify
+  hosts: all
+  become: true
+  gather_facts: true
+  tasks:
+    - name: "Verify testuser1 exists"
+      user:
+        name: testuser1
+        state: present
+      register: user1_check
+      check_mode: true
+
+    - name: "Assert testuser1 was created"
+      assert:
+        that:
+          - not user1_check.changed
+        success_msg: "testuser1 exists as expected"
+
+    - name: "Verify testuser2 exists"
+      user:
+        name: testuser2
+        state: present
+      register: user2_check
+      check_mode: true
+
+    - name: "Assert testuser2 was created"
+      assert:
+        that:
+          - not user2_check.changed
+        success_msg: "testuser2 exists as expected"
+
+    - name: "Verify developers group exists (Linux only)"
+      group:
+        name: developers
+        state: present
+      register: dev_group_check
+      check_mode: true
+      when: ansible_os_family != "Darwin"
+
+    - name: "Assert developers group was created (Linux only)"
+      assert:
+        that:
+          - not dev_group_check.changed
+        success_msg: "developers group exists as expected"
+      when: ansible_os_family != "Darwin"
+
+    - name: "Verify testers group exists (Linux only)"
+      group:
+        name: testers
+        state: present
+      register: test_group_check
+      check_mode: true
+      when: ansible_os_family != "Darwin"
+
+    - name: "Assert testers group was created (Linux only)"
+      assert:
+        that:
+          - not test_group_check.changed
+        success_msg: "testers group exists as expected"
+      when: ansible_os_family != "Darwin"
+
+    - name: "Verify no empty group exists"
+      shell: "getent group '[]' || echo 'NOT_FOUND'"
+      register: empty_group_check
+      changed_when: false
+      failed_when: false
+      when: ansible_os_family != "Darwin"
+
+    - name: "Assert no empty group was created"
+      assert:
+        that:
+          - "'NOT_FOUND' in empty_group_check.stdout"
+        success_msg: "No empty group found - fix is working"
+      when: ansible_os_family != "Darwin"
