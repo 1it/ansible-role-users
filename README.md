@@ -106,6 +106,15 @@ users:
 
 ```
 
+### User List Structure
+```yaml
+users_group_list:
+  - name: sudo
+  - name: docker
+  - name: temporary
+    state: absent
+```
+
 ## Playbook example
 
 1. Creating a system admin user and a deploy user:
