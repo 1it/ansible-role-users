@@ -2,7 +2,7 @@
 galaxy_info:
   role_name: users
   author: Ivan Tuzhilkin
-  namespace: ansible-1it
+  namespace: 1it
   description: Modern Ansible role for managing user accounts and SSH keys with cross-platform support
   license: MIT
   min_ansible_version: '2.12.0'
