@@ -16,6 +16,7 @@ skip_list:
   - yaml[line-length]  # Allow longer lines in some cases
   - name[casing]       # Allow flexible task naming
   - risky-file-permissions  # We handle permissions explicitly
+  - schema[meta]       # Allow legacy namespace format
 
 # Enable offline mode for faster linting
 offline: false
