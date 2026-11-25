@@ -2,7 +2,7 @@
 - name: Sudoers | Reject reserved sudoers keywords as usernames
   ansible.builtin.assert:
     that:
-      - _user.username != 'ALL'
+      - _user.username not in ['ALL', 'Defaults', 'User_Alias', 'Runas_Alias', 'Host_Alias', 'Cmnd_Alias']
     fail_msg: "Refusing to render sudoers rule for reserved sudoers keyword '{{ _user.username }}'."
     quiet: true
   loop: "{{ _users_present | selectattr('sudo', 'defined') | list }}"

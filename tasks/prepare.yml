@@ -44,11 +44,15 @@
     _users_groups_by_name: {}
     _users_by_name: {}
     _users_passwords_by_name: {}
+    _users_present_home_realpaths: {}
     _users_absent_passwd_homes: {}
+    _users_absent_home_realpaths: {}
     _users_absent_homes_resolved: false
     _users_ssh_homes: {}
+    _users_ssh_home_realpaths: {}
     _users_limits_entries: []
     _users_limits_by_key: {}
+    _users_need_ssh_keygen: false
     _users_need_sudo: false
     _users_protected_paths_norm: >-
       {{
@@ -128,7 +132,12 @@
 
 - name: Prepare | Detect ssh-keygen prerequisite requirement
   ansible.builtin.set_fact:
-    _users_need_ssh_keygen: "{{ (_users_present | selectattr('generate_key', 'defined') | selectattr('generate_key') | list | length) > 0 }}"
+    _users_need_ssh_keygen: true
+  loop: "{{ _users_present | selectattr('generate_key', 'defined') | list }}"
+  loop_control:
+    loop_var: _user
+    label: "{{ _user.username }}"
+  when: _user.generate_key | bool
 
 - name: Prepare | Detect sudo prerequisite requirement
   ansible.builtin.set_fact:

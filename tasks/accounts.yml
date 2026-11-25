@@ -1,4 +1,43 @@
 ---
+- name: Accounts | Resolve target realpaths for present user homes
+  ansible.builtin.command:
+    argv:
+      - readlink
+      - -m
+      - --
+      - "{{ _user_home_normalized }}"
+  vars:
+    _user_home_raw: "{{ _user.home | default(users_home_base ~ '/' ~ _user.username) }}"
+    _user_home_normalized: "{{ (_user_home_raw | regex_replace('/+', '/') | regex_replace('/+$', '')) or '/' }}"
+  register: _users_present_realpath_lookup
+  changed_when: false
+  loop: "{{ _users_present }}"
+  loop_control:
+    loop_var: _user
+    label: "{{ _user.username }}"
+  when: _users_present | length > 0
+  tags:
+    - directories
+    - security
+
+- name: Accounts | Record resolved realpaths for present user homes
+  ansible.builtin.set_fact:
+    _users_present_home_realpaths: >-
+      {{
+        _users_present_home_realpaths
+        | combine({_rp_item._user.username: ((_rp_item.stdout | trim | regex_replace('/+', '/') | regex_replace('/+$', '')) or '/')})
+      }}
+  loop: "{{ _users_present_realpath_lookup.results | default([]) }}"
+  loop_control:
+    loop_var: _rp_item
+    label: "{{ _rp_item._user.username }}"
+  when:
+    - not (_rp_item.skipped | default(false))
+    - (_rp_item.stdout | default('') | trim | length) > 0
+  tags:
+    - directories
+    - security
+
 - name: Accounts | Manage present user accounts
   ansible.builtin.user:
     name: "{{ _user.username }}"
@@ -9,7 +48,7 @@
     append: "{{ _user.append | default(users_groups_append) | bool }}"
     shell: "{{ _user.shell | default(users_default_system_shell if (_user.system | default(false) | bool) else users_default_shell) }}"
     system: "{{ _user.system | default(false) | bool }}"
-    create_home: "{{ _user_create_home | bool }}"
+    create_home: "{{ (_user_create_home | bool) and (_user_home_normalized not in _users_protected_paths_norm) and (_user_home_realpath not in _users_protected_paths_norm) }}"
     home: "{{ _user_home_normalized if (_user.home is defined or not (_user.system | default(false) | bool) or (_user_create_home | bool)) else omit }}"
     comment: "{{ _user.name | default(omit) }}"
     password: "{{ _users_passwords_by_name[_user.username] | default(omit) }}"
@@ -25,6 +64,7 @@
     _user_primary_group: "{{ _user.group | default(_user.username if (users_create_group_per_user | bool) else users_default_group) }}"
     _user_home_raw: "{{ _user.home | default(users_home_base ~ '/' ~ _user.username) }}"
     _user_home_normalized: "{{ (_user_home_raw | regex_replace('/+', '/') | regex_replace('/+$', '')) or '/' }}"
+    _user_home_realpath: "{{ _users_present_home_realpaths.get(_user.username, _user_home_normalized) }}"
     _user_create_home: >-
       {{
         (_user.create_home | bool)
@@ -40,7 +80,7 @@
         )
       }}
     _ssh_key_type: "{{ _user.ssh_key_type | default(users_default_ssh_key_type) }}"
-    _ssh_key_bits: "{{ _user.ssh_key_bits if (_user.ssh_key_bits is defined) else (omit if _ssh_key_type == 'ed25519' else users_default_ssh_key_bits) }}"
+    _ssh_key_bits: "{{ _user.ssh_key_bits if (_user.ssh_key_bits is defined) else (users_default_ssh_key_bits if _ssh_key_type == 'rsa' else omit) }}"
   loop: "{{ _users_present }}"
   loop_control:
     loop_var: _user
@@ -54,10 +94,12 @@
     owner: "{{ _user.username }}"
     group: "{{ _user_primary_group }}"
     mode: "{{ _user.home_mode | default(users_home_mode) }}"
+    follow: false
   vars:
     _user_primary_group: "{{ _user.group | default(_user.username if (users_create_group_per_user | bool) else users_default_group) }}"
     _user_home_raw: "{{ _user.home | default(users_home_base ~ '/' ~ _user.username) }}"
     _user_home_normalized: "{{ (_user_home_raw | regex_replace('/+', '/') | regex_replace('/+$', '')) or '/' }}"
+    _user_home_realpath: "{{ _users_present_home_realpaths.get(_user.username, _user_home_normalized) }}"
     _user_create_home: >-
       {{
         (_user.create_home | bool)
@@ -80,6 +122,7 @@
     - _user_create_home | bool
     - not (_user_home_normalized is regex('(^|/)\\.{1,2}($|/)'))
     - _user_home_normalized not in _users_protected_paths_norm
+    - _user_home_realpath not in _users_protected_paths_norm
   tags:
     - directories
     - security
@@ -91,10 +134,12 @@
     owner: "{{ _user.username }}"
     group: "{{ _user_primary_group }}"
     recurse: true
+    follow: false
   vars:
     _user_primary_group: "{{ _user.group | default(_user.username if (users_create_group_per_user | bool) else users_default_group) }}"
     _user_home_raw: "{{ _user.home | default(users_home_base ~ '/' ~ _user.username) }}"
     _user_home_normalized: "{{ (_user_home_raw | regex_replace('/+', '/') | regex_replace('/+$', '')) or '/' }}"
+    _user_home_realpath: "{{ _users_present_home_realpaths.get(_user.username, _user_home_normalized) }}"
     _user_create_home: >-
       {{
         (_user.create_home | bool)
@@ -118,6 +163,7 @@
     - _user.homedir_recurse | default(users_homedir_recurse) | bool
     - not (_user_home_normalized is regex('(^|/)\\.{1,2}($|/)'))
     - _user_home_normalized not in _users_protected_paths_norm
+    - _user_home_realpath not in _users_protected_paths_norm
   tags:
     - directories
     - security

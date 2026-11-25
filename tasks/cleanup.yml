@@ -89,6 +89,45 @@
   tags:
     - directories
 
+- name: Cleanup | Resolve target realpaths for absent user homes
+  ansible.builtin.command:
+    argv:
+      - readlink
+      - -m
+      - --
+      - "{{ _user_home_normalized }}"
+  vars:
+    _user_home_raw: "{{ _users_absent_passwd_homes.get(_user.username, _user.home | default(users_home_base ~ '/' ~ _user.username)) }}"
+    _user_home_normalized: "{{ (_user_home_raw | regex_replace('/+', '/') | regex_replace('/+$', '')) or '/' }}"
+  register: _users_absent_realpath_lookup
+  changed_when: false
+  loop: "{{ _users_absent }}"
+  loop_control:
+    loop_var: _user
+    label: "{{ _user.username }}"
+  when:
+    - _users_absent | length > 0
+    - _user.delete_homedir | default(_users_effective_delete_homedirs) | bool
+  tags:
+    - directories
+
+- name: Cleanup | Record resolved realpaths for absent user homes
+  ansible.builtin.set_fact:
+    _users_absent_home_realpaths: >-
+      {{
+        (_users_absent_home_realpaths | default({}))
+        | combine({_rp_item._user.username: ((_rp_item.stdout | trim | regex_replace('/+', '/') | regex_replace('/+$', '')) or '/')})
+      }}
+  loop: "{{ _users_absent_realpath_lookup.results | default([]) }}"
+  loop_control:
+    loop_var: _rp_item
+    label: "{{ _rp_item._user.username }}"
+  when:
+    - not (_rp_item.skipped | default(false))
+    - (_rp_item.stdout | default('') | trim | length) > 0
+  tags:
+    - directories
+
 - name: Cleanup | Remove home directories for absent users (opt-in)
   ansible.builtin.file:
     path: "{{ _user_home_normalized }}"
@@ -96,6 +135,7 @@
   vars:
     _user_home_raw: "{{ _users_absent_passwd_homes.get(_user.username, _user.home | default(users_home_base ~ '/' ~ _user.username)) }}"
     _user_home_normalized: "{{ (_user_home_raw | regex_replace('/+', '/') | regex_replace('/+$', '')) or '/' }}"
+    _user_home_realpath: "{{ (_users_absent_home_realpaths | default({})).get(_user.username, _user_home_normalized) }}"
   loop: "{{ _users_absent }}"
   loop_control:
     loop_var: _user
@@ -104,5 +144,6 @@
     - _user.delete_homedir | default(_users_effective_delete_homedirs) | bool
     - not (_user_home_normalized is regex('(^|/)\\.{1,2}($|/)'))
     - _user_home_normalized not in _users_protected_paths_norm
+    - _user_home_realpath not in _users_protected_paths_norm
   tags:
     - directories
