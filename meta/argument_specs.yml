@@ -66,6 +66,7 @@ argument_specs:
             description: Create as a system account.
           password:
             type: str
+            no_log: true
             description: Encrypted password hash (crypt format). Automatically protected by no_log when users_no_log is true.
           update_password:
             type: str
@@ -227,6 +228,7 @@ argument_specs:
             description: Create as a system account.
           password:
             type: str
+            no_log: true
             description: Encrypted password hash.
           update_password:
             type: str
@@ -354,7 +356,7 @@ argument_specs:
           force:
             type: bool
             default: false
-            description: Force removal when state is absent.
+            description: Force removal when state is absent (requires Ansible >= 2.15 when true).
 
       users_extra_groups:
         type: list
@@ -383,7 +385,7 @@ argument_specs:
           force:
             type: bool
             default: false
-            description: Force removal when state is absent.
+            description: Force removal when state is absent (requires Ansible >= 2.15 when true).
 
       users_default_target_hosts:
         type: list

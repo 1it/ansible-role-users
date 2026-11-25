@@ -1,4 +1,37 @@
 ---
+- name: SSH | Resolve existing passwd homes for SSH-managed users
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ _user.username }}"
+    fail_key: false
+  register: _users_ssh_passwd_lookup
+  loop: "{{ _users_present }}"
+  loop_control:
+    loop_var: _user
+    label: "{{ _user.username }}"
+  when: >-
+    (_user.generate_key | default(false) | bool)
+    or (_user.authorized is defined)
+
+- name: SSH | Record resolved SSH user home directories
+  ansible.builtin.set_fact:
+    _users_ssh_homes: >-
+      {{
+        (_users_ssh_homes | default({}))
+        | combine({_lookup_item._user.username: (_passwd_entry[4] | normpath)})
+      }}
+  vars:
+    _passwd_entry: "{{ (_lookup_item.ansible_facts.getent_passwd | default({})).get(_lookup_item._user.username) }}"
+  loop: "{{ _users_ssh_passwd_lookup.results | default([]) }}"
+  loop_control:
+    loop_var: _lookup_item
+    label: "{{ _lookup_item._user.username }}"
+  when:
+    - not (_lookup_item.skipped | default(false))
+    - _passwd_entry is sequence
+    - _passwd_entry is not string
+    - _passwd_entry | length > 4
+
 - name: SSH | Secure user .ssh directories
   ansible.builtin.file:
     path: "{{ _user_home_normalized }}/.ssh"
@@ -8,14 +41,13 @@
     mode: "{{ users_ssh_dir_mode }}"
   vars:
     _user_primary_group: "{{ _user.group | default(_user.username if (users_create_group_per_user | bool) else users_default_group) }}"
-    _user_home_raw: "{{ _user.home | default(users_home_base ~ '/' ~ _user.username) }}"
-    _user_home_normalized: "{{ (_user_home_raw | regex_replace('/+$', '')) or '/' }}"
+    _user_home_normalized: "{{ ((_users_ssh_homes | default({})).get(_user.username, _user.home | default(users_home_base ~ '/' ~ _user.username))) | normpath }}"
   loop: "{{ _users_present }}"
   loop_control:
     loop_var: _user
     label: "{{ _user.username }}"
   when:
-    - _user_home_normalized not in users_protected_home_paths
+    - _user_home_normalized not in _users_protected_paths_norm
     - (_user.generate_key | default(false) | bool) or ((_user.authorized | default([])) | length > 0)
 
 - name: SSH | Manage user authorized_keys
@@ -24,7 +56,9 @@
     key: "{{ _user.authorized | join('\n') }}"
     exclusive: "{{ _user.exclusive | default(users_default_ssh_exclusive) | bool }}"
     state: present
-    manage_dir: true
+    manage_dir: "{{ _user_home_normalized in _users_protected_paths_norm }}"
+  vars:
+    _user_home_normalized: "{{ ((_users_ssh_homes | default({})).get(_user.username, _user.home | default(users_home_base ~ '/' ~ _user.username))) | normpath }}"
   loop: "{{ _users_present }}"
   loop_control:
     loop_var: _user
@@ -42,14 +76,13 @@
     mode: "{{ users_ssh_authorized_keys_mode }}"
   vars:
     _user_primary_group: "{{ _user.group | default(_user.username if (users_create_group_per_user | bool) else users_default_group) }}"
-    _user_home_raw: "{{ _user.home | default(users_home_base ~ '/' ~ _user.username) }}"
-    _user_home_normalized: "{{ (_user_home_raw | regex_replace('/+$', '')) or '/' }}"
+    _user_home_normalized: "{{ ((_users_ssh_homes | default({})).get(_user.username, _user.home | default(users_home_base ~ '/' ~ _user.username))) | normpath }}"
   loop: "{{ _users_present }}"
   loop_control:
     loop_var: _user
     label: "{{ _user.username }}"
   when:
-    - _user_home_normalized not in users_protected_home_paths
+    - _user_home_normalized not in _users_protected_paths_norm
     - _user.authorized is defined
     - _user.authorized | length > 0
 
@@ -58,14 +91,13 @@
     path: "{{ _user_home_normalized }}/.ssh/authorized_keys"
     state: absent
   vars:
-    _user_home_raw: "{{ _user.home | default(users_home_base ~ '/' ~ _user.username) }}"
-    _user_home_normalized: "{{ (_user_home_raw | regex_replace('/+$', '')) or '/' }}"
+    _user_home_normalized: "{{ ((_users_ssh_homes | default({})).get(_user.username, _user.home | default(users_home_base ~ '/' ~ _user.username))) | normpath }}"
   loop: "{{ _users_present }}"
   loop_control:
     loop_var: _user
     label: "{{ _user.username }}"
   when:
-    - _user_home_normalized not in users_protected_home_paths
+    - _user_home_normalized not in _users_protected_paths_norm
     - _user.authorized is defined
     - _user.authorized | length == 0
     - _user.exclusive | default(users_default_ssh_exclusive) | bool

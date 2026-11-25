@@ -11,7 +11,7 @@
 - name: Sudoers | Deploy per-user sudoers drop-in files
   ansible.builtin.template:
     src: sudoers.j2
-    dest: "{{ users_sudoers_dir }}/{{ users_sudoers_file_prefix }}{{ _user.username | regex_replace('[^a-zA-Z0-9_-]', '_') }}"
+    dest: "{{ users_sudoers_dir }}/{{ users_sudoers_file_prefix }}{{ _user.username | replace('_', '__') | replace('.', '_dot_') }}"
     owner: root
     group: root
     mode: "0440"
@@ -26,7 +26,7 @@
 
 - name: Sudoers | Remove disabled per-user sudoers drop-in files
   ansible.builtin.file:
-    path: "{{ users_sudoers_dir }}/{{ users_sudoers_file_prefix }}{{ _user.username | regex_replace('[^a-zA-Z0-9_-]', '_') }}"
+    path: "{{ users_sudoers_dir }}/{{ users_sudoers_file_prefix }}{{ _user.username | replace('_', '__') | replace('.', '_dot_') }}"
     state: absent
   loop: "{{ _users_present | selectattr('sudo', 'defined') | list }}"
   loop_control:

@@ -3,7 +3,7 @@
   ansible.builtin.group:
     name: "{{ _group.name }}"
     state: absent
-    force: "{{ _group.force | default(false) | bool }}"
+    force: "{{ true if (_group.force | default(false) | bool) else omit }}"
   loop: "{{ _users_groups_absent }}"
   loop_control:
     loop_var: _group
@@ -14,7 +14,12 @@
     name: "{{ _user.username }}"
     state: absent
   vars:
-    _present_group_names: "{{ _users_groups_present | map(attribute='name') | list }}"
+    _protected_group_names: >-
+      {{
+        (_users_groups_present | map(attribute='name') | list)
+        + (_users_present | selectattr('group', 'defined') | map(attribute='group') | list)
+        + ([users_default_group] if not (users_create_group_per_user | bool) else [])
+      }}
   loop: "{{ _users_absent }}"
   loop_control:
     loop_var: _user
@@ -22,11 +27,11 @@
   when:
     - users_create_group_per_user | bool
     - _user.group is not defined
-    - _user.username not in _present_group_names
+    - _user.username not in _protected_group_names
 
 - name: Cleanup | Remove sudoers drop-ins for absent users
   ansible.builtin.file:
-    path: "{{ users_sudoers_dir }}/{{ users_sudoers_file_prefix }}{{ _user.username | regex_replace('[^a-zA-Z0-9_-]', '_') }}"
+    path: "{{ users_sudoers_dir }}/{{ users_sudoers_file_prefix }}{{ _user.username | replace('_', '__') | replace('.', '_dot_') }}"
     state: absent
   loop: "{{ _users_absent }}"
   loop_control:
@@ -47,19 +52,51 @@
   tags:
     - linger
 
+- name: Cleanup | Resolve existing passwd homes when cleanup runs standalone
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ _user.username }}"
+    fail_key: false
+  register: _users_cleanup_passwd_lookup
+  loop: "{{ _users_absent }}"
+  loop_control:
+    loop_var: _user
+    label: "{{ _user.username }}"
+  when:
+    - _users_absent | length > 0
+    - _users_absent_passwd_homes is not defined
+
+- name: Cleanup | Record standalone passwd homes for guarded cleanup
+  ansible.builtin.set_fact:
+    _users_absent_passwd_homes: >-
+      {{
+        (_users_absent_passwd_homes | default({}))
+        | combine({_lookup_item._user.username: (_passwd_entry[4] | normpath)})
+      }}
+  vars:
+    _passwd_entry: "{{ (_lookup_item.ansible_facts.getent_passwd | default({})).get(_lookup_item._user.username) }}"
+  loop: "{{ _users_cleanup_passwd_lookup.results | default([]) }}"
+  loop_control:
+    loop_var: _lookup_item
+    label: "{{ _lookup_item._user.username }}"
+  when:
+    - not (_lookup_item.skipped | default(false))
+    - _passwd_entry is sequence
+    - _passwd_entry is not string
+    - _passwd_entry | length > 4
+
 - name: Cleanup | Remove home directories for absent users (opt-in)
   ansible.builtin.file:
     path: "{{ _user_home_normalized }}"
     state: absent
   vars:
-    _user_home_raw: "{{ _user.home | default(users_home_base ~ '/' ~ _user.username) }}"
-    _user_home_normalized: "{{ (_user_home_raw | regex_replace('/+$', '')) or '/' }}"
+    _user_home_normalized: "{{ ((_users_absent_passwd_homes | default({})).get(_user.username, _user.home | default(users_home_base ~ '/' ~ _user.username))) | normpath }}"
   loop: "{{ _users_absent }}"
   loop_control:
     loop_var: _user
     label: "{{ _user.username }}"
   when:
     - _user.delete_homedir | default(_users_effective_delete_homedirs) | bool
-    - _user_home_normalized not in users_protected_home_paths
+    - _user_home_normalized not in _users_protected_paths_norm
   tags:
     - directories

@@ -1,0 +1,15 @@
+---
+- name: Prepare
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Bootstrap Python 3 for Ansible
+      ansible.builtin.raw: >-
+        if ! command -v python3 >/dev/null 2>&1; then
+          if command -v apt-get >/dev/null 2>&1; then
+            DEBIAN_FRONTEND=noninteractive apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends python3;
+          elif command -v dnf >/dev/null 2>&1; then
+            dnf install -y python3;
+          fi;
+        fi
+      changed_when: false

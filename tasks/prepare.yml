@@ -19,9 +19,12 @@
       - users_extra_groups is sequence and users_extra_groups is not string
       - users_limits is sequence and users_limits is not string
       - users_extra_limits is sequence and users_extra_limits is not string
+      - users_home_base is string and users_home_base.startswith('/')
+      - not (users_home_base is regex('(^|/)\\.\\.($|/)'))
     fail_msg: >-
-      ansible-role-users requires a Linux host and list values for users,
-      users_extra, users_group_list, users_extra_groups, users_limits, and users_extra_limits.
+      ansible-role-users requires a Linux host, a canonical absolute users_home_base,
+      and list values for users, users_extra, users_group_list, users_extra_groups,
+      users_limits, and users_extra_limits.
     quiet: true
 
 - name: Prepare | Load OS family variables
@@ -40,9 +43,12 @@
   ansible.builtin.set_fact:
     _users_groups_by_name: {}
     _users_by_name: {}
+    _users_passwords_by_name: {}
     _users_limits_entries: []
     _users_limits_by_key: {}
     _users_need_sudo: false
+    _users_protected_paths_norm: "{{ users_protected_home_paths | map('normpath') | list }}"
+    _users_has_passwords: "{{ (((users | default([])) + (users_extra | default([]))) | selectattr('password', 'defined') | list | length) > 0 }}"
 
 - name: Prepare | Merge and deduplicate group definitions
   ansible.builtin.set_fact:
@@ -57,10 +63,17 @@
 
 - name: Prepare | Resolve and deduplicate target users for current host
   ansible.builtin.set_fact:
-    _users_by_name: "{{ _users_by_name | combine({_user_item.username: _user_item}) }}"
+    _users_by_name: "{{ _users_by_name | combine({_user_item.username: _user_sanitized}) }}"
+    _users_passwords_by_name: >-
+      {{
+        (_users_passwords_by_name | combine({_user_item.username: _user_item.password}))
+        if (_user_item.password is defined)
+        else _users_passwords_by_name
+      }}
   vars:
     _users_host_targets: "{{ ['all', inventory_hostname] + (group_names | default([])) }}"
     _user_targets: "{{ _user_item.target_hosts if (_user_item.target_hosts is defined) else users_default_target_hosts }}"
+    _user_sanitized: "{{ _user_item | dict2items | rejectattr('key', 'equalto', 'password') | items2dict }}"
   loop: "{{ (users | default([])) + (users_extra | default([])) }}"
   loop_control:
     loop_var: _user_item
@@ -69,6 +82,7 @@
     - _user_item.username is defined
     - (_user_item.username | string | trim | length) > 0
     - (_user_targets | intersect(_users_host_targets) | length) > 0
+  no_log: "{{ (users_no_log | bool) and (_users_has_passwords | bool) }}"
 
 - name: Prepare | Finalize resolved user and group lists
   ansible.builtin.set_fact:
@@ -89,12 +103,13 @@
     _groups_all: "{{ _users_groups_by_name.values() | list }}"
     _users_all: "{{ _users_by_name.values() | list }}"
 
-- name: Prepare | Validate resolved usernames
+- name: Prepare | Validate resolved usernames and explicit home paths
   ansible.builtin.assert:
     that:
       - _user.username is match('^[a-zA-Z0-9._-]+$')
       - _user.username not in ['.', '..']
-    fail_msg: "Invalid username '{{ _user.username }}'."
+      - (_user.home is not defined) or (_user.home.startswith('/') and not (_user.home is regex('(^|/)\\.\\.($|/)')))
+    fail_msg: "Invalid username or noncanonical home path for '{{ _user.username }}'."
     quiet: true
   loop: "{{ _users_present + _users_absent }}"
   loop_control:

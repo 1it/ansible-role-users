@@ -10,9 +10,9 @@
     shell: "{{ _user.shell | default(users_default_system_shell if (_user.system | default(false) | bool) else users_default_shell) }}"
     system: "{{ _user.system | default(false) | bool }}"
     create_home: "{{ _user_create_home | bool }}"
-    home: "{{ _user_home if (_user.home is defined or not (_user.system | default(false) | bool) or (_user_create_home | bool)) else omit }}"
+    home: "{{ _user_home_normalized if (_user.home is defined or not (_user.system | default(false) | bool) or (_user_create_home | bool)) else omit }}"
     comment: "{{ _user.name | default(omit) }}"
-    password: "{{ _user.password | default(omit) }}"
+    password: "{{ _users_passwords_by_name[_user.username] | default(omit) }}"
     update_password: "{{ _user.update_password | default(users_default_update_password) }}"
     password_lock: "{{ _user.password_lock | default(omit) }}"
     expires: "{{ _user.expires | default(omit) }}"
@@ -23,7 +23,7 @@
     ssh_key_comment: "{{ (_user.ssh_key_comment | default(_user.username ~ '@' ~ ansible_facts['hostname'])) if (_user.generate_key | default(false) | bool) else omit }}"
   vars:
     _user_primary_group: "{{ _user.group | default(_user.username if (users_create_group_per_user | bool) else users_default_group) }}"
-    _user_home: "{{ _user.home | default(users_home_base ~ '/' ~ _user.username) }}"
+    _user_home_normalized: "{{ (_user.home | default(users_home_base ~ '/' ~ _user.username)) | normpath }}"
     _user_create_home: >-
       {{
         (_user.create_home | bool)
@@ -44,7 +44,7 @@
   loop_control:
     loop_var: _user
     label: "{{ _user.username }}"
-  no_log: "{{ (users_no_log | bool) and ((_users_present | selectattr('password', 'defined') | list | length) > 0) }}"
+  no_log: "{{ (users_no_log | bool) and (_users_has_passwords | bool) }}"
 
 - name: Accounts | Ensure home directory ownership and permissions
   ansible.builtin.file:
@@ -55,8 +55,7 @@
     mode: "{{ _user.home_mode | default(users_home_mode) }}"
   vars:
     _user_primary_group: "{{ _user.group | default(_user.username if (users_create_group_per_user | bool) else users_default_group) }}"
-    _user_home_raw: "{{ _user.home | default(users_home_base ~ '/' ~ _user.username) }}"
-    _user_home_normalized: "{{ (_user_home_raw | regex_replace('/+$', '')) or '/' }}"
+    _user_home_normalized: "{{ (_user.home | default(users_home_base ~ '/' ~ _user.username)) | normpath }}"
     _user_create_home: >-
       {{
         (_user.create_home | bool)
@@ -77,7 +76,7 @@
     label: "{{ _user.username }}"
   when:
     - _user_create_home | bool
-    - _user_home_normalized not in users_protected_home_paths
+    - _user_home_normalized not in _users_protected_paths_norm
   tags:
     - directories
     - security
@@ -91,8 +90,7 @@
     recurse: true
   vars:
     _user_primary_group: "{{ _user.group | default(_user.username if (users_create_group_per_user | bool) else users_default_group) }}"
-    _user_home_raw: "{{ _user.home | default(users_home_base ~ '/' ~ _user.username) }}"
-    _user_home_normalized: "{{ (_user_home_raw | regex_replace('/+$', '')) or '/' }}"
+    _user_home_normalized: "{{ (_user.home | default(users_home_base ~ '/' ~ _user.username)) | normpath }}"
     _user_create_home: >-
       {{
         (_user.create_home | bool)
@@ -114,20 +112,47 @@
   when:
     - _user_create_home | bool
     - _user.homedir_recurse | default(users_homedir_recurse) | bool
-    - _user_home_normalized not in users_protected_home_paths
+    - _user_home_normalized not in _users_protected_paths_norm
   tags:
     - directories
     - security
+
+- name: Accounts | Resolve existing passwd homes before removing absent users
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ _user.username }}"
+    fail_key: false
+  register: _users_absent_passwd_lookup
+  loop: "{{ _users_absent }}"
+  loop_control:
+    loop_var: _user
+    label: "{{ _user.username }}"
+  when: _users_absent | length > 0
+
+- name: Accounts | Record resolved passwd homes for guarded cleanup
+  ansible.builtin.set_fact:
+    _users_absent_passwd_homes: >-
+      {{
+        (_users_absent_passwd_homes | default({}))
+        | combine({_lookup_item._user.username: (_passwd_entry[4] | normpath)})
+      }}
+  vars:
+    _passwd_entry: "{{ (_lookup_item.ansible_facts.getent_passwd | default({})).get(_lookup_item._user.username) }}"
+  loop: "{{ _users_absent_passwd_lookup.results | default([]) }}"
+  loop_control:
+    loop_var: _lookup_item
+    label: "{{ _lookup_item._user.username }}"
+  when:
+    - _passwd_entry is sequence
+    - _passwd_entry is not string
+    - _passwd_entry | length > 4
 
 - name: Accounts | Remove absent user accounts
   ansible.builtin.user:
     name: "{{ _user.username }}"
     state: absent
-    remove: "{{ (_user.delete_homedir | default(_users_effective_delete_homedirs) | bool) and (_user_home_normalized not in users_protected_home_paths) }}"
+    remove: false
     force: "{{ _user.force | default(users_force_remove) | bool }}"
-  vars:
-    _user_home_raw: "{{ _user.home | default(users_home_base ~ '/' ~ _user.username) }}"
-    _user_home_normalized: "{{ (_user_home_raw | regex_replace('/+$', '')) or '/' }}"
   loop: "{{ _users_absent }}"
   loop_control:
     loop_var: _user

@@ -77,8 +77,10 @@
     users_create_homedir: true
     users_delete_homedirs: false
 
-  roles:
-    - role: ..
+  tasks:
+    - name: Apply users role
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir }}/.."
 
   post_tasks:
     - name: Verify users were created
