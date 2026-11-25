@@ -1,4 +1,16 @@
 ---
+- name: Sudoers | Reject reserved sudoers keywords as usernames
+  ansible.builtin.assert:
+    that:
+      - _user.username != 'ALL'
+    fail_msg: "Refusing to render sudoers rule for reserved sudoers keyword '{{ _user.username }}'."
+    quiet: true
+  loop: "{{ _users_present | selectattr('sudo', 'defined') | list }}"
+  loop_control:
+    loop_var: _user
+    label: "{{ _user.username }}"
+  when: (_user.sudo.state | default('present')) == 'present'
+
 - name: Sudoers | Ensure sudoers.d directory exists
   ansible.builtin.file:
     path: "{{ users_sudoers_dir }}"

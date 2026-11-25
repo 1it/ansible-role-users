@@ -23,7 +23,8 @@
     ssh_key_comment: "{{ (_user.ssh_key_comment | default(_user.username ~ '@' ~ ansible_facts['hostname'])) if (_user.generate_key | default(false) | bool) else omit }}"
   vars:
     _user_primary_group: "{{ _user.group | default(_user.username if (users_create_group_per_user | bool) else users_default_group) }}"
-    _user_home_normalized: "{{ (_user.home | default(users_home_base ~ '/' ~ _user.username)) | normpath }}"
+    _user_home_raw: "{{ _user.home | default(users_home_base ~ '/' ~ _user.username) }}"
+    _user_home_normalized: "{{ (_user_home_raw | regex_replace('/+', '/') | regex_replace('/+$', '')) or '/' }}"
     _user_create_home: >-
       {{
         (_user.create_home | bool)
@@ -55,7 +56,8 @@
     mode: "{{ _user.home_mode | default(users_home_mode) }}"
   vars:
     _user_primary_group: "{{ _user.group | default(_user.username if (users_create_group_per_user | bool) else users_default_group) }}"
-    _user_home_normalized: "{{ (_user.home | default(users_home_base ~ '/' ~ _user.username)) | normpath }}"
+    _user_home_raw: "{{ _user.home | default(users_home_base ~ '/' ~ _user.username) }}"
+    _user_home_normalized: "{{ (_user_home_raw | regex_replace('/+', '/') | regex_replace('/+$', '')) or '/' }}"
     _user_create_home: >-
       {{
         (_user.create_home | bool)
@@ -76,6 +78,7 @@
     label: "{{ _user.username }}"
   when:
     - _user_create_home | bool
+    - not (_user_home_normalized is regex('(^|/)\\.{1,2}($|/)'))
     - _user_home_normalized not in _users_protected_paths_norm
   tags:
     - directories
@@ -90,7 +93,8 @@
     recurse: true
   vars:
     _user_primary_group: "{{ _user.group | default(_user.username if (users_create_group_per_user | bool) else users_default_group) }}"
-    _user_home_normalized: "{{ (_user.home | default(users_home_base ~ '/' ~ _user.username)) | normpath }}"
+    _user_home_raw: "{{ _user.home | default(users_home_base ~ '/' ~ _user.username) }}"
+    _user_home_normalized: "{{ (_user_home_raw | regex_replace('/+', '/') | regex_replace('/+$', '')) or '/' }}"
     _user_create_home: >-
       {{
         (_user.create_home | bool)
@@ -112,6 +116,7 @@
   when:
     - _user_create_home | bool
     - _user.homedir_recurse | default(users_homedir_recurse) | bool
+    - not (_user_home_normalized is regex('(^|/)\\.{1,2}($|/)'))
     - _user_home_normalized not in _users_protected_paths_norm
   tags:
     - directories
@@ -133,8 +138,8 @@
   ansible.builtin.set_fact:
     _users_absent_passwd_homes: >-
       {{
-        (_users_absent_passwd_homes | default({}))
-        | combine({_lookup_item._user.username: (_passwd_entry[4] | normpath)})
+        _users_absent_passwd_homes
+        | combine({_lookup_item._user.username: ((_passwd_entry[4] | regex_replace('/+', '/') | regex_replace('/+$', '')) or '/')})
       }}
   vars:
     _passwd_entry: "{{ (_lookup_item.ansible_facts.getent_passwd | default({})).get(_lookup_item._user.username) }}"
@@ -146,6 +151,11 @@
     - _passwd_entry is sequence
     - _passwd_entry is not string
     - _passwd_entry | length > 4
+
+- name: Accounts | Mark absent passwd homes as resolved for current run
+  ansible.builtin.set_fact:
+    _users_absent_homes_resolved: true
+  when: _users_absent | length > 0
 
 - name: Accounts | Remove absent user accounts
   ansible.builtin.user:

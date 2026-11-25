@@ -20,7 +20,7 @@
       - users_limits is sequence and users_limits is not string
       - users_extra_limits is sequence and users_extra_limits is not string
       - users_home_base is string and users_home_base.startswith('/')
-      - not (users_home_base is regex('(^|/)\\.\\.($|/)'))
+      - not (users_home_base is regex('(^|/)\\.{1,2}($|/)'))
     fail_msg: >-
       ansible-role-users requires a Linux host, a canonical absolute users_home_base,
       and list values for users, users_extra, users_group_list, users_extra_groups,
@@ -44,10 +44,20 @@
     _users_groups_by_name: {}
     _users_by_name: {}
     _users_passwords_by_name: {}
+    _users_absent_passwd_homes: {}
+    _users_absent_homes_resolved: false
+    _users_ssh_homes: {}
     _users_limits_entries: []
     _users_limits_by_key: {}
     _users_need_sudo: false
-    _users_protected_paths_norm: "{{ users_protected_home_paths | map('normpath') | list }}"
+    _users_protected_paths_norm: >-
+      {{
+        users_protected_home_paths
+        | map('regex_replace', '/+', '/')
+        | map('regex_replace', '/+$', '')
+        | map('regex_replace', '^$', '/')
+        | list
+      }}
     _users_has_passwords: "{{ (((users | default([])) + (users_extra | default([]))) | selectattr('password', 'defined') | list | length) > 0 }}"
 
 - name: Prepare | Merge and deduplicate group definitions
@@ -68,7 +78,7 @@
       {{
         (_users_passwords_by_name | combine({_user_item.username: _user_item.password}))
         if (_user_item.password is defined)
-        else _users_passwords_by_name
+        else (_users_passwords_by_name | dict2items | rejectattr('key', 'equalto', _user_item.username) | items2dict)
       }}
   vars:
     _users_host_targets: "{{ ['all', inventory_hostname] + (group_names | default([])) }}"
@@ -108,7 +118,7 @@
     that:
       - _user.username is match('^[a-zA-Z0-9._-]+$')
       - _user.username not in ['.', '..']
-      - (_user.home is not defined) or (_user.home.startswith('/') and not (_user.home is regex('(^|/)\\.\\.($|/)')))
+      - (_user.home is not defined) or (_user.home.startswith('/') and not (_user.home is regex('(^|/)\\.{1,2}($|/)')))
     fail_msg: "Invalid username or noncanonical home path for '{{ _user.username }}'."
     quiet: true
   loop: "{{ _users_present + _users_absent }}"

@@ -17,8 +17,8 @@
   ansible.builtin.set_fact:
     _users_ssh_homes: >-
       {{
-        (_users_ssh_homes | default({}))
-        | combine({_lookup_item._user.username: (_passwd_entry[4] | normpath)})
+        _users_ssh_homes
+        | combine({_lookup_item._user.username: ((_passwd_entry[4] | regex_replace('/+', '/') | regex_replace('/+$', '')) or '/')})
       }}
   vars:
     _passwd_entry: "{{ (_lookup_item.ansible_facts.getent_passwd | default({})).get(_lookup_item._user.username) }}"
@@ -41,12 +41,14 @@
     mode: "{{ users_ssh_dir_mode }}"
   vars:
     _user_primary_group: "{{ _user.group | default(_user.username if (users_create_group_per_user | bool) else users_default_group) }}"
-    _user_home_normalized: "{{ ((_users_ssh_homes | default({})).get(_user.username, _user.home | default(users_home_base ~ '/' ~ _user.username))) | normpath }}"
+    _user_home_raw: "{{ _users_ssh_homes.get(_user.username, _user.home | default(users_home_base ~ '/' ~ _user.username)) }}"
+    _user_home_normalized: "{{ (_user_home_raw | regex_replace('/+', '/') | regex_replace('/+$', '')) or '/' }}"
   loop: "{{ _users_present }}"
   loop_control:
     loop_var: _user
     label: "{{ _user.username }}"
   when:
+    - not (_user_home_normalized is regex('(^|/)\\.{1,2}($|/)'))
     - _user_home_normalized not in _users_protected_paths_norm
     - (_user.generate_key | default(false) | bool) or ((_user.authorized | default([])) | length > 0)
 
@@ -56,9 +58,10 @@
     key: "{{ _user.authorized | join('\n') }}"
     exclusive: "{{ _user.exclusive | default(users_default_ssh_exclusive) | bool }}"
     state: present
-    manage_dir: "{{ _user_home_normalized in _users_protected_paths_norm }}"
+    manage_dir: "{{ (_user_home_normalized in _users_protected_paths_norm) or (_user_home_normalized is regex('(^|/)\\.{1,2}($|/)')) }}"
   vars:
-    _user_home_normalized: "{{ ((_users_ssh_homes | default({})).get(_user.username, _user.home | default(users_home_base ~ '/' ~ _user.username))) | normpath }}"
+    _user_home_raw: "{{ _users_ssh_homes.get(_user.username, _user.home | default(users_home_base ~ '/' ~ _user.username)) }}"
+    _user_home_normalized: "{{ (_user_home_raw | regex_replace('/+', '/') | regex_replace('/+$', '')) or '/' }}"
   loop: "{{ _users_present }}"
   loop_control:
     loop_var: _user
@@ -76,12 +79,14 @@
     mode: "{{ users_ssh_authorized_keys_mode }}"
   vars:
     _user_primary_group: "{{ _user.group | default(_user.username if (users_create_group_per_user | bool) else users_default_group) }}"
-    _user_home_normalized: "{{ ((_users_ssh_homes | default({})).get(_user.username, _user.home | default(users_home_base ~ '/' ~ _user.username))) | normpath }}"
+    _user_home_raw: "{{ _users_ssh_homes.get(_user.username, _user.home | default(users_home_base ~ '/' ~ _user.username)) }}"
+    _user_home_normalized: "{{ (_user_home_raw | regex_replace('/+', '/') | regex_replace('/+$', '')) or '/' }}"
   loop: "{{ _users_present }}"
   loop_control:
     loop_var: _user
     label: "{{ _user.username }}"
   when:
+    - not (_user_home_normalized is regex('(^|/)\\.{1,2}($|/)'))
     - _user_home_normalized not in _users_protected_paths_norm
     - _user.authorized is defined
     - _user.authorized | length > 0
@@ -91,12 +96,14 @@
     path: "{{ _user_home_normalized }}/.ssh/authorized_keys"
     state: absent
   vars:
-    _user_home_normalized: "{{ ((_users_ssh_homes | default({})).get(_user.username, _user.home | default(users_home_base ~ '/' ~ _user.username))) | normpath }}"
+    _user_home_raw: "{{ _users_ssh_homes.get(_user.username, _user.home | default(users_home_base ~ '/' ~ _user.username)) }}"
+    _user_home_normalized: "{{ (_user_home_raw | regex_replace('/+', '/') | regex_replace('/+$', '')) or '/' }}"
   loop: "{{ _users_present }}"
   loop_control:
     loop_var: _user
     label: "{{ _user.username }}"
   when:
+    - not (_user_home_normalized is regex('(^|/)\\.{1,2}($|/)'))
     - _user_home_normalized not in _users_protected_paths_norm
     - _user.authorized is defined
     - _user.authorized | length == 0

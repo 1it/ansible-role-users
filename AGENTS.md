@@ -16,7 +16,7 @@ Role-specific conventions, platform guardrails, and validation commands for main
 
 - **Supported OS matrix (`amd64` + `arm64`):** Debian 12/13, Ubuntu 24.04/26.04, EL 8/9/10 (RHEL, Rocky, AlmaLinux, CentOS Stream). Do not add legacy EL 7, Debian ≤11, Ubuntu ≤20.04, or macOS workarounds.
 - **Sudoers drop-in filenames:** `sudo` silently ignores files in `/etc/sudoers.d/` containing `.` or ending in `~`. Always encode usernames collision-free (`replace('_', '__') | replace('.', '_dot_')`) and always validate templates with `visudo -cf %s`.
-- **Protected paths:** Never chown, chmod, recurse, or delete paths listed in `users_protected_home_paths` (always reject `..` traversal segments and normalize via `| normpath` first).
+- **Protected paths:** Never chown, chmod, recurse, or delete paths listed in `users_protected_home_paths` (always reject `.` / `..` path segments and collapse repeated/trailing slashes via `regex_replace` so both Ansible 2.12+ compatibility and `//opt` canonicalization hold).
 - **Minimal container/server prerequisites:** Do not install packages unconditionally. Only check/install `openssh-client(s)` or `sudo` when configured users actually request `generate_key: true` or `sudo` and the binary is missing. On minimal Debian/Ubuntu hosts, check/bootstrap `python3-apt` before calling `ansible.builtin.apt`.
 - **Systemd lingering:** Only invoke `loginctl` when `/run/systemd/system` exists so non-systemd containers stay idempotent and error-free.
 - **Sensitive data:** Keep `users_no_log: true` by default so `password` hashes are not exposed in task output.
