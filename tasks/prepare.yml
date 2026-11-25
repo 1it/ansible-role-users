@@ -1,0 +1,143 @@
+---
+- name: Prepare | Gather minimal facts when facts are not populated
+  ansible.builtin.setup:
+    gather_subset:
+      - "!all"
+      - "min"
+  when: >-
+    ansible_facts['os_family'] is not defined
+    or ansible_facts['hostname'] is not defined
+    or ansible_facts['system'] is not defined
+
+- name: Prepare | Validate target operating system and core variables
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['system'] == 'Linux'
+      - users is sequence and users is not string
+      - users_extra is sequence and users_extra is not string
+      - users_group_list is sequence and users_group_list is not string
+      - users_extra_groups is sequence and users_extra_groups is not string
+      - users_limits is sequence and users_limits is not string
+      - users_extra_limits is sequence and users_extra_limits is not string
+    fail_msg: >-
+      ansible-role-users requires a Linux host and list values for users,
+      users_extra, users_group_list, users_extra_groups, users_limits, and users_extra_limits.
+    quiet: true
+
+- name: Prepare | Load OS family variables
+  ansible.builtin.include_vars: "{{ lookup('ansible.builtin.first_found', _users_vars_files) }}"
+  vars:
+    _users_vars_files:
+      files:
+        - "{{ ansible_facts['distribution'] }}-{{ ansible_facts['distribution_major_version'] }}.yml"
+        - "{{ ansible_facts['distribution'] }}.yml"
+        - "{{ ansible_facts['os_family'] }}.yml"
+        - "default.yml"
+      paths:
+        - "{{ role_path }}/vars"
+
+- name: Prepare | Initialize resolved user, group, and limit maps
+  ansible.builtin.set_fact:
+    _users_groups_by_name: {}
+    _users_by_name: {}
+    _users_limits_entries: []
+    _users_limits_by_key: {}
+    _users_need_sudo: false
+
+- name: Prepare | Merge and deduplicate group definitions
+  ansible.builtin.set_fact:
+    _users_groups_by_name: "{{ _users_groups_by_name | combine({_group_item.name: _group_item}) }}"
+  loop: "{{ (users_group_list | default([])) + (users_extra_groups | default([])) }}"
+  loop_control:
+    loop_var: _group_item
+    label: "{{ _group_item.name | default('unnamed') }}"
+  when:
+    - _group_item.name is defined
+    - (_group_item.name | string | trim | length) > 0
+
+- name: Prepare | Resolve and deduplicate target users for current host
+  ansible.builtin.set_fact:
+    _users_by_name: "{{ _users_by_name | combine({_user_item.username: _user_item}) }}"
+  vars:
+    _users_host_targets: "{{ ['all', inventory_hostname] + (group_names | default([])) }}"
+    _user_targets: "{{ _user_item.target_hosts if (_user_item.target_hosts is defined) else users_default_target_hosts }}"
+  loop: "{{ (users | default([])) + (users_extra | default([])) }}"
+  loop_control:
+    loop_var: _user_item
+    label: "{{ _user_item.username | default('unnamed') }}"
+  when:
+    - _user_item.username is defined
+    - (_user_item.username | string | trim | length) > 0
+    - (_user_targets | intersect(_users_host_targets) | length) > 0
+
+- name: Prepare | Finalize resolved user and group lists
+  ansible.builtin.set_fact:
+    _users_groups_present: >-
+      {{
+        (_groups_all | selectattr('state', 'undefined') | list)
+        + (_groups_all | selectattr('state', 'defined') | selectattr('state', 'equalto', 'present') | list)
+      }}
+    _users_groups_absent: "{{ _groups_all | selectattr('state', 'defined') | selectattr('state', 'equalto', 'absent') | list }}"
+    _users_present: >-
+      {{
+        (_users_all | selectattr('state', 'undefined') | list)
+        + (_users_all | selectattr('state', 'defined') | selectattr('state', 'equalto', 'present') | list)
+      }}
+    _users_absent: "{{ _users_all | selectattr('state', 'defined') | selectattr('state', 'equalto', 'absent') | list }}"
+    _users_effective_delete_homedirs: "{{ (users_delete_homedirs | bool) or (delete_homedirs | bool) }}"
+  vars:
+    _groups_all: "{{ _users_groups_by_name.values() | list }}"
+    _users_all: "{{ _users_by_name.values() | list }}"
+
+- name: Prepare | Validate resolved usernames
+  ansible.builtin.assert:
+    that:
+      - _user.username is match('^[a-zA-Z0-9._-]+$')
+      - _user.username not in ['.', '..']
+    fail_msg: "Invalid username '{{ _user.username }}'."
+    quiet: true
+  loop: "{{ _users_present + _users_absent }}"
+  loop_control:
+    loop_var: _user
+    label: "{{ _user.username }}"
+
+- name: Prepare | Detect ssh-keygen prerequisite requirement
+  ansible.builtin.set_fact:
+    _users_need_ssh_keygen: "{{ (_users_present | selectattr('generate_key', 'defined') | selectattr('generate_key') | list | length) > 0 }}"
+
+- name: Prepare | Detect sudo prerequisite requirement
+  ansible.builtin.set_fact:
+    _users_need_sudo: true
+  loop: "{{ _users_present | selectattr('sudo', 'defined') | list }}"
+  loop_control:
+    loop_var: _user
+    label: "{{ _user.username }}"
+  when: (_user.sudo.state | default('present')) == 'present'
+
+- name: Prepare | Collect per-user resource limits
+  ansible.builtin.set_fact:
+    _users_limits_entries: "{{ _users_limits_entries + [_limit_entry] }}"
+  vars:
+    _limit_entry:
+      domain: "{{ _user_limit.0.username }}"
+      type: "{{ _user_limit.1.type }}"
+      item: "{{ _user_limit.1.item }}"
+      value: "{{ _user_limit.1.value }}"
+  loop: "{{ _users_present | subelements('limits', skip_missing=True) }}"
+  loop_control:
+    loop_var: _user_limit
+    label: "{{ _user_limit.0.username }}:{{ _user_limit.1.item }}"
+
+- name: Prepare | Deduplicate global and per-user resource limits
+  ansible.builtin.set_fact:
+    _users_limits_by_key: "{{ _users_limits_by_key | combine({_limit_key: _limit_item}) }}"
+  vars:
+    _limit_key: "{{ _limit_item.domain }}|{{ _limit_item.type }}|{{ _limit_item.item }}"
+  loop: "{{ (users_limits | default([])) + (users_extra_limits | default([])) + _users_limits_entries }}"
+  loop_control:
+    loop_var: _limit_item
+    label: "{{ _limit_item.domain }}:{{ _limit_item.type }}:{{ _limit_item.item }}"
+
+- name: Prepare | Finalize resolved resource limits list
+  ansible.builtin.set_fact:
+    _users_limits_resolved: "{{ _users_limits_by_key.values() | list }}"

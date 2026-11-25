@@ -1,9 +1,6 @@
 ---
-# .ansible-lint
-
 profile: production
 
-# Exclude specific paths
 exclude_paths:
   - .cache/
   - .github/
@@ -11,19 +8,12 @@ exclude_paths:
   - molecule/
   - tests/
 
-# Skip specific rules
 skip_list:
-  - yaml[line-length]  # Allow longer lines in some cases
-  - name[casing]       # Allow flexible task naming
-  - risky-file-permissions  # We handle permissions explicitly
-  - schema[meta]       # Allow legacy namespace format
+  - yaml[line-length]
+  - schema[meta]
 
-# Enable offline mode for faster linting
 offline: false
-
-# Use default rules with some customizations
 use_default_rules: true
 
-# Warn on new rules
 warn_list:
   - experimental

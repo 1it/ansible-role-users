@@ -7,7 +7,6 @@ on:
   pull_request:
     branches: [main, master]
   schedule:
-    # Run tests weekly on Sundays at 2 AM UTC
     - cron: '0 2 * * 0'
 
 jobs:
@@ -19,68 +18,104 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Python 3
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.x'
+          python-version: '3.12'
 
-      - name: Install test dependencies
+      - name: Install lint dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install ansible yamllint ansible-lint
+          pip install ansible-core yamllint ansible-lint
+          ansible-galaxy collection install -r requirements.yml
 
-      - name: Lint code
+      - name: Run yamllint and ansible-lint
         run: |
           yamllint .
           ansible-lint
 
-  molecule:
-    name: Molecule
+  docker-matrix:
+    name: Integration (${{ matrix.image }})
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        distro:
-          - 01it/molecule-alpine:latest
-
+        image:
+          - debian:12
+          - debian:13
+          - ubuntu:24.04
+          - ubuntu:26.04
+          - rockylinux/rockylinux:9
+          - rockylinux/rockylinux:10
     steps:
       - name: Check out the codebase
         uses: actions/checkout@v4
 
       - name: Set up Python 3
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.x'
+          python-version: '3.12'
 
-      - name: Install test dependencies
+      - name: Install Ansible and collections
         run: |
           python -m pip install --upgrade pip
-          pip install ansible molecule-plugins[docker] docker
+          pip install ansible-core
+          ansible-galaxy collection install ansible.posix community.docker
 
-      - name: Set up role symlink for Molecule
-        run: |
-          mkdir -p molecule/default/roles
-          ln -sf ../../../ molecule/default/roles/users
-
-      - name: Run Molecule tests
-        run: molecule test
+      - name: Converge and verify idempotency
         env:
-          PY_COLORS: '1'
-          ANSIBLE_FORCE_COLOR: '1'
-          MOLECULE_DISTRO: ${{ matrix.distro }}
-
-  custom-tests:
-    name: Custom Tests
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out the codebase
-        uses: actions/checkout@v4
-
-      - name: Install Docker Compose
+          TEST_IMAGE: ${{ matrix.image }}
         run: |
-          sudo apt-get update
-          sudo apt-get install -y docker-compose
-
-      - name: Make test script executable
-        run: chmod +x run-tests-docker.sh
-
-      - name: Run Docker-based tests
-        run: ./run-tests-docker.sh
+          set -euo pipefail
+          cname="ansible-users-test-$(echo "${TEST_IMAGE}" | tr '/:' '--')"
+          tmp_pb="$(mktemp /tmp/test-users-XXXXXX.yml)"
+          cleanup() {
+            rm -f "${tmp_pb}"
+            docker rm -f "${cname}" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          docker run -d --name "${cname}" "${TEST_IMAGE}" sleep infinity
+          if echo "${TEST_IMAGE}" | grep -Eq '^(debian|ubuntu):'; then
+            docker exec "${cname}" sh -c 'apt-get update -qq && apt-get install -y --no-install-recommends python3 >/dev/null'
+          fi
+          python3 - "${tmp_pb}" <<'PYEOF'
+          import sys
+          content = """---
+          - name: Test users role
+            hosts: all
+            gather_facts: true
+            vars:
+              users_group_list:
+                - name: developers
+                  state: present
+              users:
+                - username: alice
+                  name: Alice Admin
+                  uid: 2001
+                  groups:
+                    - developers
+                  authorized:
+                    - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl alice@test"
+                  exclusive: true
+                  generate_key: true
+                  sudo:
+                    nopasswd: true
+                    commands:
+                      - /usr/bin/id
+                  limits:
+                    - type: soft
+                      item: nofile
+                      value: "65536"
+                  target_hosts:
+                    - all
+                  state: present
+            roles:
+              - role: .
+          """
+          import textwrap
+          with open(sys.argv[1], "w", encoding="utf-8") as fh:
+              fh.write(textwrap.dedent(content).lstrip())
+          PYEOF
+          ansible-playbook -i "${cname}," -c community.docker.docker "${tmp_pb}"
+          out="$(ansible-playbook -i "${cname}," -c community.docker.docker "${tmp_pb}")"
+          echo "${out}"
+          echo "${out}" | grep -q 'changed=0'

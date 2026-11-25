@@ -3,7 +3,6 @@
   hosts: localhost
   connection: local
   gather_facts: false
-  # no_log: "{{ molecule_no_log }}"
   tasks:
     - name: Check for instance config file
       ansible.builtin.stat:
@@ -26,7 +25,7 @@
         state: absent
         force_kill: true
       register: server
-      with_items: "{{ instance_conf }}"
+      loop: "{{ instance_conf }}"
       when: instance_conf | length > 0
       async: 7200
       poll: 0
@@ -38,7 +37,7 @@
       until: docker_jobs.finished
       retries: 300
       delay: 2
-      with_items: "{{ server.results }}"
+      loop: "{{ server.results }}"
       when: server.results is defined
 
     - name: Remove instance config

@@ -1,0 +1,65 @@
+---
+- name: Cleanup | Remove absent additional groups
+  ansible.builtin.group:
+    name: "{{ _group.name }}"
+    state: absent
+    force: "{{ _group.force | default(false) | bool }}"
+  loop: "{{ _users_groups_absent }}"
+  loop_control:
+    loop_var: _group
+    label: "{{ _group.name }}"
+
+- name: Cleanup | Remove absent user per-user primary groups
+  ansible.builtin.group:
+    name: "{{ _user.username }}"
+    state: absent
+  vars:
+    _present_group_names: "{{ _users_groups_present | map(attribute='name') | list }}"
+  loop: "{{ _users_absent }}"
+  loop_control:
+    loop_var: _user
+    label: "{{ _user.username }}"
+  when:
+    - users_create_group_per_user | bool
+    - _user.group is not defined
+    - _user.username not in _present_group_names
+
+- name: Cleanup | Remove sudoers drop-ins for absent users
+  ansible.builtin.file:
+    path: "{{ users_sudoers_dir }}/{{ users_sudoers_file_prefix }}{{ _user.username | regex_replace('[^a-zA-Z0-9_-]', '_') }}"
+    state: absent
+  loop: "{{ _users_absent }}"
+  loop_control:
+    loop_var: _user
+    label: "{{ _user.username }}"
+  tags:
+    - sudoers
+    - security
+
+- name: Cleanup | Remove systemd linger files for absent users
+  ansible.builtin.file:
+    path: "/var/lib/systemd/linger/{{ _user.username }}"
+    state: absent
+  loop: "{{ _users_absent }}"
+  loop_control:
+    loop_var: _user
+    label: "{{ _user.username }}"
+  tags:
+    - linger
+
+- name: Cleanup | Remove home directories for absent users (opt-in)
+  ansible.builtin.file:
+    path: "{{ _user_home_normalized }}"
+    state: absent
+  vars:
+    _user_home_raw: "{{ _user.home | default(users_home_base ~ '/' ~ _user.username) }}"
+    _user_home_normalized: "{{ (_user_home_raw | regex_replace('/+$', '')) or '/' }}"
+  loop: "{{ _users_absent }}"
+  loop_control:
+    loop_var: _user
+    label: "{{ _user.username }}"
+  when:
+    - _user.delete_homedir | default(_users_effective_delete_homedirs) | bool
+    - _user_home_normalized not in users_protected_home_paths
+  tags:
+    - directories

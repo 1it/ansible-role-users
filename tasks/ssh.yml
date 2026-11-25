@@ -1,0 +1,71 @@
+---
+- name: SSH | Secure user .ssh directories
+  ansible.builtin.file:
+    path: "{{ _user_home_normalized }}/.ssh"
+    state: directory
+    owner: "{{ _user.username }}"
+    group: "{{ _user_primary_group }}"
+    mode: "{{ users_ssh_dir_mode }}"
+  vars:
+    _user_primary_group: "{{ _user.group | default(_user.username if (users_create_group_per_user | bool) else users_default_group) }}"
+    _user_home_raw: "{{ _user.home | default(users_home_base ~ '/' ~ _user.username) }}"
+    _user_home_normalized: "{{ (_user_home_raw | regex_replace('/+$', '')) or '/' }}"
+  loop: "{{ _users_present }}"
+  loop_control:
+    loop_var: _user
+    label: "{{ _user.username }}"
+  when:
+    - _user_home_normalized not in users_protected_home_paths
+    - (_user.generate_key | default(false) | bool) or ((_user.authorized | default([])) | length > 0)
+
+- name: SSH | Manage user authorized_keys
+  ansible.posix.authorized_key:
+    user: "{{ _user.username }}"
+    key: "{{ _user.authorized | join('\n') }}"
+    exclusive: "{{ _user.exclusive | default(users_default_ssh_exclusive) | bool }}"
+    state: present
+    manage_dir: true
+  loop: "{{ _users_present }}"
+  loop_control:
+    loop_var: _user
+    label: "{{ _user.username }}"
+  when:
+    - _user.authorized is defined
+    - _user.authorized | length > 0
+
+- name: SSH | Enforce authorized_keys ownership and permissions
+  ansible.builtin.file:
+    path: "{{ _user_home_normalized }}/.ssh/authorized_keys"
+    state: file
+    owner: "{{ _user.username }}"
+    group: "{{ _user_primary_group }}"
+    mode: "{{ users_ssh_authorized_keys_mode }}"
+  vars:
+    _user_primary_group: "{{ _user.group | default(_user.username if (users_create_group_per_user | bool) else users_default_group) }}"
+    _user_home_raw: "{{ _user.home | default(users_home_base ~ '/' ~ _user.username) }}"
+    _user_home_normalized: "{{ (_user_home_raw | regex_replace('/+$', '')) or '/' }}"
+  loop: "{{ _users_present }}"
+  loop_control:
+    loop_var: _user
+    label: "{{ _user.username }}"
+  when:
+    - _user_home_normalized not in users_protected_home_paths
+    - _user.authorized is defined
+    - _user.authorized | length > 0
+
+- name: SSH | Revoke authorized_keys when exclusive list is empty
+  ansible.builtin.file:
+    path: "{{ _user_home_normalized }}/.ssh/authorized_keys"
+    state: absent
+  vars:
+    _user_home_raw: "{{ _user.home | default(users_home_base ~ '/' ~ _user.username) }}"
+    _user_home_normalized: "{{ (_user_home_raw | regex_replace('/+$', '')) or '/' }}"
+  loop: "{{ _users_present }}"
+  loop_control:
+    loop_var: _user
+    label: "{{ _user.username }}"
+  when:
+    - _user_home_normalized not in users_protected_home_paths
+    - _user.authorized is defined
+    - _user.authorized | length == 0
+    - _user.exclusive | default(users_default_ssh_exclusive) | bool

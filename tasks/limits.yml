@@ -1,0 +1,24 @@
+---
+- name: Limits | Ensure limits.d directory exists
+  ansible.builtin.file:
+    path: "{{ users_limits_file | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: _users_limits_resolved | length > 0
+
+- name: Limits | Deploy PAM resource limits drop-in file
+  ansible.builtin.template:
+    src: limits.conf.j2
+    dest: "{{ users_limits_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: _users_limits_resolved | length > 0
+
+- name: Limits | Remove managed PAM resource limits drop-in when empty
+  ansible.builtin.file:
+    path: "{{ users_limits_file }}"
+    state: absent
+  when: _users_limits_resolved | length == 0

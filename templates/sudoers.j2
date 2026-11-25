@@ -1,0 +1,9 @@
+# Managed by Ansible (ansible-role-users) - do not edit manually.
+{% for default_opt in (_sudo_config.defaults | default([])) %}
+Defaults:{{ _user.username }} {{ default_opt }}
+{% endfor %}
+{% set _hosts = _sudo_config.hosts | default('ALL') %}
+{% set _runas = _sudo_config.runas | default('ALL:ALL') %}
+{% set _nopasswd = _sudo_config.nopasswd | default(users_sudoers_default_nopasswd) | bool %}
+{% set _commands = _sudo_config.commands | default(['ALL']) %}
+{{ _user.username }} {{ _hosts }}=({{ _runas }}) {{ 'NOPASSWD: ' if _nopasswd else '' }}{{ _commands | join(', ') }}

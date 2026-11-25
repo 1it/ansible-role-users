@@ -1,23 +1,152 @@
 ---
-# List of users to manage
-# See README.md for detailed structure documentation
+# =============================================================================
+# Core User & Group Definitions
+# =============================================================================
+
+# Primary list of user accounts to manage.
+# See README.md and meta/argument_specs.yml for the full schema.
 users: []
 
-# List of groups to create/manage
-# Example: [{ name: 'developers', state: 'present' }]
+# Additive user entries merged onto `users` (later entry wins on same username).
+users_extra: []
+
+# Primary list of additional groups to manage.
+# Example: [{ name: 'developers', state: 'present', gid: 2000, system: false }]
 users_group_list: []
 
-# Default shell for new users
-users_default_shell: '/bin/bash'
+# Additive group entries merged onto `users_group_list` (later entry wins on same name).
+users_extra_groups: []
 
-# Default primary group for users (when not using per-user groups)
-users_default_group: 'users'
+# =============================================================================
+# User Account Defaults
+# =============================================================================
 
-# Create a unique group per user (recommended for security)
+# Default target host groups when `target_hosts` is omitted on a user entry.
+# Set `target_hosts: []` explicitly on a user to match no hosts.
+users_default_target_hosts:
+  - all
+
+# Default login shell for regular user accounts.
+users_default_shell: "/bin/bash"
+
+# Default login shell for system accounts (`system: true`) when `shell` is omitted.
+users_default_system_shell: "/usr/sbin/nologin"
+
+# Default primary group when `users_create_group_per_user` is false.
+users_default_group: "users"
+
+# Create a dedicated primary group per user (recommended for isolation).
 users_create_group_per_user: true
 
-# Create home directories for users
+# Create home directories for regular user accounts by default.
 users_create_homedir: true
 
-# Remove home directories when users are deleted (use with caution)
+# Default parent directory for user home paths (`<users_home_base>/<username>`).
+users_home_base: "/home"
+
+# Permissions mode applied to managed user home directories.
+users_home_mode: "0750"
+
+# Recursively chown home directories (opt-in; avoid on large/shared homes).
+users_homedir_recurse: false
+
+# Default `append` behavior for supplementary groups (`false` = declarative).
+users_groups_append: false
+
+# Default `update_password` behavior (`always` or `on_create`).
+users_default_update_password: "always"
+
+# Suppress sensitive task output (`no_log`) whenever any user defines `password`.
+users_no_log: true
+
+# =============================================================================
+# SSH Key & Directory Defaults
+# =============================================================================
+
+# Default SSH key algorithm when `generate_key: true`.
+users_default_ssh_key_type: "ed25519"
+
+# Default SSH key size in bits (applied to key types that accept bit length, e.g. rsa).
+users_default_ssh_key_bits: 4096
+
+# Default `exclusive` setting for SSH `authorized_keys`.
+users_default_ssh_exclusive: false
+
+# Permissions mode for user `.ssh` directories.
+users_ssh_dir_mode: "0700"
+
+# Permissions mode for user `authorized_keys` files.
+users_ssh_authorized_keys_mode: "0600"
+
+# =============================================================================
+# Sudoers Drop-in Management (/etc/sudoers.d/)
+# =============================================================================
+
+# Directory where per-user sudoers drop-ins are deployed.
+users_sudoers_dir: "/etc/sudoers.d"
+
+# Filename prefix for role-managed sudoers drop-in files.
+users_sudoers_file_prefix: "90-ansible-user-"
+
+# Default `nopasswd` value when a user configures `sudo` without specifying `nopasswd`.
+users_sudoers_default_nopasswd: false
+
+# =============================================================================
+# PAM Resource Limits (/etc/security/limits.d/)
+# =============================================================================
+
+# Drop-in file path for role-managed PAM resource limits.
+users_limits_file: "/etc/security/limits.d/90-ansible-users.conf"
+
+# Global list of PAM resource limit entries (combined with per-user `limits`).
+# Example:
+#   - domain: "@developers"
+#     type: "soft"
+#     item: "nofile"
+#     value: 65536
+users_limits: []
+
+# Additive PAM resource limit entries merged onto `users_limits`.
+users_extra_limits: []
+
+# =============================================================================
+# Prerequisites & Cleanup
+# =============================================================================
+
+# Install missing prerequisites (`openssh-client(s)`, `sudo`) only when required
+# by configured users (`generate_key: true` or `sudo`).
+users_manage_prerequisites: true
+
+# Remove home directories when deleting users (`state: absent`). DESTRUCTIVE - opt-in.
+users_delete_homedirs: false
+
+# Legacy alias for `users_delete_homedirs` (kept for backward compatibility).
 delete_homedirs: false
+
+# Pass `force: true` to `ansible.builtin.user` when removing accounts.
+users_force_remove: false
+
+# Protected system paths that are NEVER modified, recursively chowned, or deleted.
+users_protected_home_paths:
+  - "/"
+  - "/bin"
+  - "/boot"
+  - "/dev"
+  - "/dev/null"
+  - "/etc"
+  - "/home"
+  - "/lib"
+  - "/lib64"
+  - "/media"
+  - "/mnt"
+  - "/nonexistent"
+  - "/opt"
+  - "/proc"
+  - "/root"
+  - "/run"
+  - "/sbin"
+  - "/srv"
+  - "/sys"
+  - "/tmp"
+  - "/usr"
+  - "/var"

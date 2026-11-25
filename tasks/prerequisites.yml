@@ -1,0 +1,83 @@
+---
+- name: Prerequisites | Check if ssh-keygen is installed
+  ansible.builtin.stat:
+    path: "{{ users_ssh_keygen_bin }}"
+  register: _users_ssh_keygen_stat
+  when: _users_need_ssh_keygen | bool
+
+- name: Prerequisites | Check if visudo is installed
+  ansible.builtin.stat:
+    path: "{{ users_visudo_bin }}"
+  register: _users_visudo_stat
+  when: _users_need_sudo | bool
+
+- name: Prerequisites | Compute missing prerequisite packages
+  ansible.builtin.set_fact:
+    _users_missing_packages: >-
+      {{
+        ([users_ssh_client_package] if ((_users_need_ssh_keygen | bool) and not (_users_ssh_keygen_stat.stat.exists | default(false))) else [])
+        + ([users_sudo_package] if ((_users_need_sudo | bool) and not (_users_visudo_stat.stat.exists | default(false))) else [])
+      }}
+
+- name: Prerequisites | Install missing packages on Debian family
+  when:
+    - _users_missing_packages | length > 0
+    - ansible_facts['os_family'] == 'Debian'
+  block:
+    - name: Prerequisites | Check python3-apt availability on Debian family
+      ansible.builtin.command:
+        argv:
+          - "{{ ansible_facts['python']['executable'] | default('/usr/bin/python3') }}"
+          - "-c"
+          - "import apt"
+      register: _users_python3_apt_check
+      changed_when: false
+      failed_when: false
+
+    - name: Prerequisites | Refresh apt cache before bootstrapping python3-apt
+      ansible.builtin.command:
+        argv:
+          - apt-get
+          - update
+          - "-qq"
+      environment:
+        DEBIAN_FRONTEND: noninteractive
+      changed_when: true
+      when: _users_python3_apt_check.rc != 0
+
+    - name: Prerequisites | Bootstrap python3-apt on minimal Debian/Ubuntu hosts
+      ansible.builtin.command:
+        argv:
+          - apt-get
+          - install
+          - "-y"
+          - "--no-install-recommends"
+          - python3-apt
+      environment:
+        DEBIAN_FRONTEND: noninteractive
+      changed_when: true
+      when: _users_python3_apt_check.rc != 0
+
+    - name: Prerequisites | Install missing packages via apt
+      ansible.builtin.apt:
+        name: "{{ _users_missing_packages }}"
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+        install_recommends: false
+
+- name: Prerequisites | Install missing packages on RedHat family
+  ansible.builtin.dnf:
+    name: "{{ _users_missing_packages }}"
+    state: present
+  when:
+    - _users_missing_packages | length > 0
+    - ansible_facts['os_family'] == 'RedHat'
+
+- name: Prerequisites | Install missing packages on other Linux families
+  ansible.builtin.package:
+    name: "{{ _users_missing_packages }}"
+    state: present
+  when:
+    - _users_missing_packages | length > 0
+    - ansible_facts['os_family'] not in ['Debian', 'RedHat']
