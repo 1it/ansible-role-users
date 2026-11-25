@@ -1,0 +1,47 @@
+---
+- name: Sudoers | Reject reserved sudoers keywords as usernames
+  ansible.builtin.assert:
+    that:
+      - _user.username not in ['ALL', 'Defaults', 'User_Alias', 'Runas_Alias', 'Host_Alias', 'Cmnd_Alias']
+    fail_msg: "Refusing to render sudoers rule for reserved sudoers keyword '{{ _user.username }}'."
+    quiet: true
+  loop: "{{ _users_present | selectattr('sudo', 'defined') | list }}"
+  loop_control:
+    loop_var: _user
+    label: "{{ _user.username }}"
+  when: (_user.sudo.state | default('present')) == 'present'
+
+- name: Sudoers | Ensure sudoers.d directory exists
+  ansible.builtin.file:
+    path: "{{ users_sudoers_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+  when: _users_need_sudo | bool
+
+- name: Sudoers | Deploy per-user sudoers drop-in files
+  ansible.builtin.template:
+    src: sudoers.j2
+    dest: "{{ users_sudoers_dir }}/{{ users_sudoers_file_prefix }}{{ _user.username | replace('_', '__') | replace('.', '_dot_') }}"
+    owner: root
+    group: root
+    mode: "0440"
+    validate: "{{ users_visudo_bin }} -cf %s"
+  vars:
+    _sudo_config: "{{ _user.sudo }}"
+  loop: "{{ _users_present | selectattr('sudo', 'defined') | list }}"
+  loop_control:
+    loop_var: _user
+    label: "{{ _user.username }}"
+  when: (_user.sudo.state | default('present')) == 'present'
+
+- name: Sudoers | Remove disabled per-user sudoers drop-in files
+  ansible.builtin.file:
+    path: "{{ users_sudoers_dir }}/{{ users_sudoers_file_prefix }}{{ _user.username | replace('_', '__') | replace('.', '_dot_') }}"
+    state: absent
+  loop: "{{ _users_present | selectattr('sudo', 'defined') | list }}"
+  loop_control:
+    loop_var: _user
+    label: "{{ _user.username }}"
+  when: (_user.sudo.state | default('present')) == 'absent'

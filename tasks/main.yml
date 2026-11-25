@@ -1,177 +1,64 @@
 ---
-# Global group management
-- name: Create global user group
-  ansible.builtin.group:
-    name: "{{ users_default_group }}"
-    state: present
-  when:
-    - not users_create_group_per_user
-    - ansible_os_family != "Darwin"
+- name: Prepare | Validate inputs and resolve host-specific users
+  ansible.builtin.import_tasks: prepare.yml
+  tags:
+    - always
+
+- name: Prerequisites | Ensure required packages are available
+  ansible.builtin.import_tasks: prerequisites.yml
+  when: users_manage_prerequisites | bool
   tags:
     - users
+    - users_prerequisites
+
+- name: Groups | Manage primary and supplementary groups
+  ansible.builtin.import_tasks: groups.yml
+  tags:
+    - users
+    - users_groups
     - groups
 
-# Per-user group management
-- name: Create per-user groups
-  ansible.builtin.group:
-    name: "{{ user_item.0.username }}"
-    gid: "{{ user_item.0.uid | default(omit) }}"
-    state: "{{ user_item.0.state }}"
-  loop: "{{ users | subelements('target_hosts', skip_missing=True) }}"
-  loop_control:
-    loop_var: user_item
-    label: "{{ user_item.0.username }}"
-  when:
-    - users is iterable
-    - users_create_group_per_user
-    - user_item.0.state == 'present'
-    - inventory_hostname in groups[user_item.1] or user_item.1 == 'all'
-    - ansible_os_family != "Darwin"
+- name: Accounts | Manage user accounts and home directories
+  ansible.builtin.import_tasks: accounts.yml
   tags:
     - users
-    - groups
-
-# Additional group management
-- name: Manage additional groups
-  ansible.builtin.group:
-    name: "{{ group_item.name }}"
-    state: "{{ group_item.state | default('present') }}"
-  loop: "{{ users_group_list }}"
-  loop_control:
-    loop_var: group_item
-    label: "{{ group_item.name }}"
-  when:
-    - users_group_list is iterable
-    - users_group_list | length > 0
-    - ansible_os_family != "Darwin"
-  tags:
-    - users
-    - groups
-# User account management
-- name: Manage user accounts
-  ansible.builtin.user:
-    name: "{{ user_item.0.username }}"
-    uid: "{{ user_item.0.uid | default(omit) }}"
-    group: "{{ user_item.0.username if users_create_group_per_user else users_default_group }}"
-    groups: "{{ user_item.0.groups | default(omit) }}"
-    shell: "{{ user_item.0.shell | default(users_default_shell) }}"
-    create_home: "{{ users_create_homedir }}"
-    home: "{{ user_item.0.home | default('/home/' + user_item.0.username) }}"
-    system: "{{ user_item.0.system | default(false) }}"
-    password: "{{ user_item.0.password | default(omit) }}"
-    generate_ssh_key: "{{ user_item.0.generate_key | default(false) }}"
-    ssh_key_comment: "{{ user_item.0.username }}@{{ ansible_hostname }}"
-    comment: "{{ user_item.0.name | default('') }}"
-    state: "{{ user_item.0.state }}"
-  loop: "{{ users | subelements('target_hosts', skip_missing=True) }}"
-  loop_control:
-    loop_var: user_item
-    label: "{{ user_item.0.username }}"
-  when:
-    - users is iterable
-    - inventory_hostname in groups[user_item.1] or user_item.1 == 'all'
-  tags:
-    - users
+    - users_accounts
     - accounts
 
-# SSH key management
-- name: Manage user SSH authorized keys
-  ansible.posix.authorized_key:
-    user: "{{ user_item.0.username }}"
-    key: "{{ user_item.0.authorized | list | join('\n') }}"
-    exclusive: "{{ user_item.0.exclusive | default(false) }}"
-  loop: "{{ users | subelements('target_hosts', skip_missing=True) }}"
-  loop_control:
-    loop_var: user_item
-    label: "{{ user_item.0.username }}"
-  when:
-    - users is iterable
-    - inventory_hostname in groups[user_item.1] or user_item.1 == 'all'
-    - user_item.0.state == 'present'
-    - user_item.0.authorized is defined
-    - user_item.0.authorized | length > 0
+- name: SSH | Manage SSH directories and authorized keys
+  ansible.builtin.import_tasks: ssh.yml
   tags:
     - users
+    - users_ssh
     - ssh
     - security
 
-# SSH directory security
-- name: Secure user SSH directories
-  ansible.builtin.file:
-    path: "{{ user_item.0.home | default('/home/' + user_item.0.username) }}/.ssh"
-    state: directory
-    mode: '0700'
-    owner: "{{ user_item.0.username }}"
-    group: "{{ user_item.0.username if users_create_group_per_user else users_default_group }}"
-  loop: "{{ users | subelements('target_hosts', skip_missing=True) }}"
-  loop_control:
-    loop_var: user_item
-    label: "{{ user_item.0.username }}"
-  when:
-    - users is iterable
-    - inventory_hostname in groups[user_item.1] or user_item.1 == 'all'
-    - user_item.0.state == 'present'
+- name: Sudoers | Manage per-user sudoers drop-ins
+  ansible.builtin.import_tasks: sudoers.yml
   tags:
     - users
-    - ssh
+    - users_sudoers
+    - sudoers
     - security
 
-# Home directory management
-- name: Ensure home directory ownership
-  ansible.builtin.file:
-    path: "{{ user_item.0.home | default('/home/' + user_item.0.username) }}"
-    state: directory
-    owner: "{{ user_item.0.username }}"
-    group: "{{ user_item.0.username if users_create_group_per_user else users_default_group }}"
-    recurse: true
-  loop: "{{ users | subelements('target_hosts', skip_missing=True) }}"
-  loop_control:
-    loop_var: user_item
-    label: "{{ user_item.0.username }}"
-  when:
-    - users is iterable
-    - users_create_homedir
-    - user_item.0.state == 'present'
-    - inventory_hostname in groups[user_item.1] or user_item.1 == 'all'
+- name: Limits | Manage PAM resource limits drop-in
+  ansible.builtin.import_tasks: limits.yml
   tags:
     - users
-    - directories
+    - users_limits
+    - limits
     - security
 
-# Cleanup operations
-- name: Remove deleted user groups
-  ansible.builtin.group:
-    name: "{{ user_item.0.username }}"
-    state: absent
-  loop: "{{ users | subelements('target_hosts', skip_missing=True) }}"
-  loop_control:
-    loop_var: user_item
-    label: "{{ user_item.0.username }}"
-  when:
-    - users is iterable
-    - users_create_group_per_user
-    - user_item.0.state == 'absent'
-    - inventory_hostname in groups[user_item.1] or user_item.1 == 'all'
-    - ansible_os_family != "Darwin"
+- name: Linger | Manage systemd user lingering
+  ansible.builtin.import_tasks: linger.yml
   tags:
     - users
-    - groups
-    - cleanup
+    - users_linger
+    - linger
 
-- name: Remove deleted user home directories
-  ansible.builtin.file:
-    path: "{{ user_item.0.home | default('/home/' + user_item.0.username) }}"
-    state: absent
-  loop: "{{ users | subelements('target_hosts', skip_missing=True) }}"
-  loop_control:
-    loop_var: user_item
-    label: "{{ user_item.0.username }}"
-  when:
-    - users is iterable
-    - user_item.0.state == 'absent'
-    - inventory_hostname in groups[user_item.1] or user_item.1 == 'all'
-    - delete_homedirs
+- name: Cleanup | Remove absent groups, drop-ins, and optional home directories
+  ansible.builtin.import_tasks: cleanup.yml
   tags:
     - users
-    - directories
+    - users_cleanup
     - cleanup

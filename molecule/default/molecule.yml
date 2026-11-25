@@ -9,25 +9,16 @@ driver:
 
 platforms:
   - name: instance
-    image: "{{ lookup('env', 'MOLECULE_DISTRO') | default('01it/molecule-alpine:latest', true) }}"
+    image: "{{ lookup('env', 'MOLECULE_DISTRO') | default('debian:12', true) }}"
     pre_build_image: true
-    privileged: true
-    volumes:
-      - /sys/fs/cgroup:/sys/fs/cgroup:rw
-    cgroupns_mode: host
-    tmpfs:
-      - /run
-      - /tmp
-    capabilities:
-      - SYS_ADMIN
+    command: "sleep infinity"
 
 provisioner:
   name: ansible
   config_options:
     defaults:
-      callbacks_enabled: profile_tasks,timer,yaml
-      stdout_callback: yaml
-      bin_ansible_callbacks: true
+      callbacks_enabled: profile_tasks,timer
+      result_format: yaml
   inventory:
     host_vars:
       instance:

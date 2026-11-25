@@ -1,0 +1,215 @@
+---
+- name: Accounts | Resolve target realpaths for present user homes
+  ansible.builtin.command:
+    argv:
+      - readlink
+      - -m
+      - --
+      - "{{ _user_home_normalized }}"
+  vars:
+    _user_home_raw: "{{ _user.home | default(users_home_base ~ '/' ~ _user.username) }}"
+    _user_home_normalized: "{{ (_user_home_raw | regex_replace('/+', '/') | regex_replace('/+$', '')) or '/' }}"
+  register: _users_present_realpath_lookup
+  changed_when: false
+  loop: "{{ _users_present }}"
+  loop_control:
+    loop_var: _user
+    label: "{{ _user.username }}"
+  when: _users_present | length > 0
+  tags:
+    - directories
+    - security
+
+- name: Accounts | Record resolved realpaths for present user homes
+  ansible.builtin.set_fact:
+    _users_present_home_realpaths: >-
+      {{
+        _users_present_home_realpaths
+        | combine({_rp_item._user.username: ((_rp_item.stdout | trim | regex_replace('/+', '/') | regex_replace('/+$', '')) or '/')})
+      }}
+  loop: "{{ _users_present_realpath_lookup.results | default([]) }}"
+  loop_control:
+    loop_var: _rp_item
+    label: "{{ _rp_item._user.username }}"
+  when:
+    - not (_rp_item.skipped | default(false))
+    - (_rp_item.stdout | default('') | trim | length) > 0
+  tags:
+    - directories
+    - security
+
+- name: Accounts | Manage present user accounts
+  ansible.builtin.user:
+    name: "{{ _user.username }}"
+    state: present
+    uid: "{{ _user.uid | default(omit) }}"
+    group: "{{ _user_primary_group }}"
+    groups: "{{ _user.groups | default(omit) }}"
+    append: "{{ _user.append | default(users_groups_append) | bool }}"
+    shell: "{{ _user.shell | default(users_default_system_shell if (_user.system | default(false) | bool) else users_default_shell) }}"
+    system: "{{ _user.system | default(false) | bool }}"
+    create_home: "{{ (_user_create_home | bool) and (_user_home_normalized not in _users_protected_paths_norm) and (_user_home_realpath not in _users_protected_paths_norm) }}"
+    home: "{{ _user_home_normalized if (_user.home is defined or not (_user.system | default(false) | bool) or (_user_create_home | bool)) else omit }}"
+    comment: "{{ _user.name | default(omit) }}"
+    password: "{{ _users_passwords_by_name[_user.username] | default(omit) }}"
+    update_password: "{{ _user.update_password | default(users_default_update_password) }}"
+    password_lock: "{{ _user.password_lock | default(omit) }}"
+    expires: "{{ _user.expires | default(omit) }}"
+    generate_ssh_key: "{{ _user.generate_key | default(false) | bool }}"
+    ssh_key_type: "{{ _ssh_key_type if (_user.generate_key | default(false) | bool) else omit }}"
+    ssh_key_bits: "{{ _ssh_key_bits if (_user.generate_key | default(false) | bool) else omit }}"
+    ssh_key_file: "{{ (_user.ssh_key_file | default('.ssh/id_' ~ _ssh_key_type)) if (_user.generate_key | default(false) | bool) else omit }}"
+    ssh_key_comment: "{{ (_user.ssh_key_comment | default(_user.username ~ '@' ~ ansible_facts['hostname'])) if (_user.generate_key | default(false) | bool) else omit }}"
+  vars:
+    _user_primary_group: "{{ _user.group | default(_user.username if (users_create_group_per_user | bool) else users_default_group) }}"
+    _user_home_raw: "{{ _user.home | default(users_home_base ~ '/' ~ _user.username) }}"
+    _user_home_normalized: "{{ (_user_home_raw | regex_replace('/+', '/') | regex_replace('/+$', '')) or '/' }}"
+    _user_home_realpath: "{{ _users_present_home_realpaths.get(_user.username, _user_home_normalized) }}"
+    _user_create_home: >-
+      {{
+        (_user.create_home | bool)
+        if (_user.create_home is defined)
+        else (
+          (users_create_homedir | bool)
+          and (
+            not (_user.system | default(false) | bool)
+            or (_user.home is defined)
+            or (_user.generate_key | default(false) | bool)
+            or ((_user.authorized | default([])) | length > 0)
+          )
+        )
+      }}
+    _ssh_key_type: "{{ _user.ssh_key_type | default(users_default_ssh_key_type) }}"
+    _ssh_key_bits: "{{ _user.ssh_key_bits if (_user.ssh_key_bits is defined) else (users_default_ssh_key_bits if _ssh_key_type == 'rsa' else omit) }}"
+  loop: "{{ _users_present }}"
+  loop_control:
+    loop_var: _user
+    label: "{{ _user.username }}"
+  no_log: "{{ (users_no_log | bool) and (_users_has_passwords | bool) }}"
+
+- name: Accounts | Ensure home directory ownership and permissions
+  ansible.builtin.file:
+    path: "{{ _user_home_realpath }}"
+    state: directory
+    owner: "{{ _user.username }}"
+    group: "{{ _user_primary_group }}"
+    mode: "{{ _user.home_mode | default(users_home_mode) }}"
+    follow: false
+  vars:
+    _user_primary_group: "{{ _user.group | default(_user.username if (users_create_group_per_user | bool) else users_default_group) }}"
+    _user_home_raw: "{{ _user.home | default(users_home_base ~ '/' ~ _user.username) }}"
+    _user_home_normalized: "{{ (_user_home_raw | regex_replace('/+', '/') | regex_replace('/+$', '')) or '/' }}"
+    _user_home_realpath: "{{ _users_present_home_realpaths.get(_user.username, _user_home_normalized) }}"
+    _user_create_home: >-
+      {{
+        (_user.create_home | bool)
+        if (_user.create_home is defined)
+        else (
+          (users_create_homedir | bool)
+          and (
+            not (_user.system | default(false) | bool)
+            or (_user.home is defined)
+            or (_user.generate_key | default(false) | bool)
+            or ((_user.authorized | default([])) | length > 0)
+          )
+        )
+      }}
+  loop: "{{ _users_present }}"
+  loop_control:
+    loop_var: _user
+    label: "{{ _user.username }}"
+  when:
+    - _user_create_home | bool
+    - not (_user_home_normalized is regex('(^|/)\\.{1,2}($|/)'))
+    - _user_home_normalized not in _users_protected_paths_norm
+    - _user_home_realpath not in _users_protected_paths_norm
+  tags:
+    - directories
+    - security
+
+- name: Accounts | Recursively ensure home directory ownership (opt-in)
+  ansible.builtin.file:
+    path: "{{ _user_home_realpath }}"
+    state: directory
+    owner: "{{ _user.username }}"
+    group: "{{ _user_primary_group }}"
+    recurse: true
+    follow: false
+  vars:
+    _user_primary_group: "{{ _user.group | default(_user.username if (users_create_group_per_user | bool) else users_default_group) }}"
+    _user_home_raw: "{{ _user.home | default(users_home_base ~ '/' ~ _user.username) }}"
+    _user_home_normalized: "{{ (_user_home_raw | regex_replace('/+', '/') | regex_replace('/+$', '')) or '/' }}"
+    _user_home_realpath: "{{ _users_present_home_realpaths.get(_user.username, _user_home_normalized) }}"
+    _user_create_home: >-
+      {{
+        (_user.create_home | bool)
+        if (_user.create_home is defined)
+        else (
+          (users_create_homedir | bool)
+          and (
+            not (_user.system | default(false) | bool)
+            or (_user.home is defined)
+            or (_user.generate_key | default(false) | bool)
+            or ((_user.authorized | default([])) | length > 0)
+          )
+        )
+      }}
+  loop: "{{ _users_present }}"
+  loop_control:
+    loop_var: _user
+    label: "{{ _user.username }}"
+  when:
+    - _user_create_home | bool
+    - _user.homedir_recurse | default(users_homedir_recurse) | bool
+    - not (_user_home_normalized is regex('(^|/)\\.{1,2}($|/)'))
+    - _user_home_normalized not in _users_protected_paths_norm
+    - _user_home_realpath not in _users_protected_paths_norm
+  tags:
+    - directories
+    - security
+
+- name: Accounts | Resolve existing passwd homes before removing absent users
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ _user.username }}"
+    fail_key: false
+  register: _users_absent_passwd_lookup
+  loop: "{{ _users_absent }}"
+  loop_control:
+    loop_var: _user
+    label: "{{ _user.username }}"
+  when: _users_absent | length > 0
+
+- name: Accounts | Record resolved passwd homes for guarded cleanup
+  ansible.builtin.set_fact:
+    _users_absent_passwd_homes: >-
+      {{
+        _users_absent_passwd_homes
+        | combine({_lookup_item._user.username: ((_passwd_entry[4] | regex_replace('/+', '/') | regex_replace('/+$', '')) or '/')})
+      }}
+  vars:
+    _passwd_entry: "{{ (_lookup_item.ansible_facts.getent_passwd | default({})).get(_lookup_item._user.username) }}"
+  loop: "{{ _users_absent_passwd_lookup.results | default([]) }}"
+  loop_control:
+    loop_var: _lookup_item
+    label: "{{ _lookup_item._user.username }}"
+  when:
+    - _passwd_entry is sequence
+    - _passwd_entry is not string
+    - _passwd_entry | length > 4
+
+- name: Accounts | Mark absent passwd homes as resolved for current run
+  ansible.builtin.set_fact:
+    _users_absent_homes_resolved: true
+  when: _users_absent | length > 0
+
+- name: Accounts | Remove absent user accounts
+  ansible.builtin.user:
+    name: "{{ _user.username }}"
+    state: absent
+    remove: false
+    force: "{{ _user.force | default(users_force_remove) | bool }}"
+  loop: "{{ _users_absent }}"
+  loop_control:
+    loop_var: _user
+    label: "{{ _user.username }}"

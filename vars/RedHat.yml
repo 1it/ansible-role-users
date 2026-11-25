@@ -1,0 +1,6 @@
+---
+users_admin_group: "wheel"
+users_ssh_client_package: "openssh-clients"
+users_sudo_package: "sudo"
+users_visudo_bin: "/usr/sbin/visudo"
+users_ssh_keygen_bin: "/usr/bin/ssh-keygen"

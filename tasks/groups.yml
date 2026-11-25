@@ -1,0 +1,31 @@
+---
+- name: Groups | Ensure default primary group exists
+  ansible.builtin.group:
+    name: "{{ users_default_group }}"
+    state: present
+  when: not (users_create_group_per_user | bool)
+
+- name: Groups | Ensure configured additional groups exist
+  ansible.builtin.group:
+    name: "{{ _group.name }}"
+    gid: "{{ _group.gid | default(omit) }}"
+    system: "{{ _group.system | default(false) | bool }}"
+    state: present
+  loop: "{{ _users_groups_present }}"
+  loop_control:
+    loop_var: _group
+    label: "{{ _group.name }}"
+
+- name: Groups | Ensure per-user primary groups exist
+  ansible.builtin.group:
+    name: "{{ _user.username }}"
+    gid: "{{ _user.gid | default(_user.uid | default(omit)) }}"
+    system: "{{ _user.system | default(false) | bool }}"
+    state: present
+  loop: "{{ _users_present }}"
+  loop_control:
+    loop_var: _user
+    label: "{{ _user.username }}"
+  when:
+    - users_create_group_per_user | bool
+    - _user.group is not defined

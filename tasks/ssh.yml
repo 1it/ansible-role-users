@@ -1,0 +1,154 @@
+---
+- name: SSH | Resolve existing passwd homes for SSH-managed users
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ _user.username }}"
+    fail_key: false
+  register: _users_ssh_passwd_lookup
+  loop: "{{ _users_present }}"
+  loop_control:
+    loop_var: _user
+    label: "{{ _user.username }}"
+  when: >-
+    (_user.generate_key | default(false) | bool)
+    or (_user.authorized is defined)
+
+- name: SSH | Record resolved SSH user home directories
+  ansible.builtin.set_fact:
+    _users_ssh_homes: >-
+      {{
+        _users_ssh_homes
+        | combine({_lookup_item._user.username: ((_passwd_entry[4] | regex_replace('/+', '/') | regex_replace('/+$', '')) or '/')})
+      }}
+  vars:
+    _passwd_entry: "{{ (_lookup_item.ansible_facts.getent_passwd | default({})).get(_lookup_item._user.username) }}"
+  loop: "{{ _users_ssh_passwd_lookup.results | default([]) }}"
+  loop_control:
+    loop_var: _lookup_item
+    label: "{{ _lookup_item._user.username }}"
+  when:
+    - not (_lookup_item.skipped | default(false))
+    - _passwd_entry is sequence
+    - _passwd_entry is not string
+    - _passwd_entry | length > 4
+
+- name: SSH | Resolve target realpaths for SSH user homes
+  ansible.builtin.command:
+    argv:
+      - readlink
+      - -m
+      - --
+      - "{{ _user_home_normalized }}"
+  vars:
+    _user_home_raw: "{{ _users_ssh_homes.get(_user.username, _user.home | default(users_home_base ~ '/' ~ _user.username)) }}"
+    _user_home_normalized: "{{ (_user_home_raw | regex_replace('/+', '/') | regex_replace('/+$', '')) or '/' }}"
+  register: _users_ssh_realpath_lookup
+  changed_when: false
+  loop: "{{ _users_present }}"
+  loop_control:
+    loop_var: _user
+    label: "{{ _user.username }}"
+  when: >-
+    (_user.generate_key | default(false) | bool)
+    or (_user.authorized is defined)
+
+- name: SSH | Record resolved realpaths for SSH user homes
+  ansible.builtin.set_fact:
+    _users_ssh_home_realpaths: >-
+      {{
+        _users_ssh_home_realpaths
+        | combine({_rp_item._user.username: ((_rp_item.stdout | trim | regex_replace('/+', '/') | regex_replace('/+$', '')) or '/')})
+      }}
+  loop: "{{ _users_ssh_realpath_lookup.results | default([]) }}"
+  loop_control:
+    loop_var: _rp_item
+    label: "{{ _rp_item._user.username }}"
+  when:
+    - not (_rp_item.skipped | default(false))
+    - (_rp_item.stdout | default('') | trim | length) > 0
+
+- name: SSH | Secure user .ssh directories
+  ansible.builtin.file:
+    path: "{{ _user_home_normalized }}/.ssh"
+    state: directory
+    owner: "{{ _user.username }}"
+    group: "{{ _user_primary_group }}"
+    mode: "{{ users_ssh_dir_mode }}"
+    follow: false
+  vars:
+    _user_primary_group: "{{ _user.group | default(_user.username if (users_create_group_per_user | bool) else users_default_group) }}"
+    _user_home_raw: "{{ _users_ssh_homes.get(_user.username, _user.home | default(users_home_base ~ '/' ~ _user.username)) }}"
+    _user_home_normalized: "{{ (_user_home_raw | regex_replace('/+', '/') | regex_replace('/+$', '')) or '/' }}"
+    _user_home_realpath: "{{ _users_ssh_home_realpaths.get(_user.username, _user_home_normalized) }}"
+  loop: "{{ _users_present }}"
+  loop_control:
+    loop_var: _user
+    label: "{{ _user.username }}"
+  when:
+    - not (_user_home_normalized is regex('(^|/)\\.{1,2}($|/)'))
+    - _user_home_normalized not in _users_protected_paths_norm
+    - _user_home_realpath not in _users_protected_paths_norm
+    - (_user.generate_key | default(false) | bool) or ((_user.authorized | default([])) | length > 0)
+
+- name: SSH | Manage user authorized_keys
+  ansible.posix.authorized_key:
+    user: "{{ _user.username }}"
+    key: "{{ _user.authorized | join('\n') }}"
+    exclusive: "{{ _user.exclusive | default(users_default_ssh_exclusive) | bool }}"
+    state: present
+    manage_dir: "{{ (_user_home_normalized in _users_protected_paths_norm) or (_user_home_realpath in _users_protected_paths_norm) or (_user_home_normalized is regex('(^|/)\\.{1,2}($|/)')) }}"
+  vars:
+    _user_home_raw: "{{ _users_ssh_homes.get(_user.username, _user.home | default(users_home_base ~ '/' ~ _user.username)) }}"
+    _user_home_normalized: "{{ (_user_home_raw | regex_replace('/+', '/') | regex_replace('/+$', '')) or '/' }}"
+    _user_home_realpath: "{{ _users_ssh_home_realpaths.get(_user.username, _user_home_normalized) }}"
+  loop: "{{ _users_present }}"
+  loop_control:
+    loop_var: _user
+    label: "{{ _user.username }}"
+  when:
+    - _user.authorized is defined
+    - _user.authorized | length > 0
+
+- name: SSH | Enforce authorized_keys ownership and permissions
+  ansible.builtin.file:
+    path: "{{ _user_home_normalized }}/.ssh/authorized_keys"
+    state: file
+    owner: "{{ _user.username }}"
+    group: "{{ _user_primary_group }}"
+    mode: "{{ users_ssh_authorized_keys_mode }}"
+    follow: false
+  vars:
+    _user_primary_group: "{{ _user.group | default(_user.username if (users_create_group_per_user | bool) else users_default_group) }}"
+    _user_home_raw: "{{ _users_ssh_homes.get(_user.username, _user.home | default(users_home_base ~ '/' ~ _user.username)) }}"
+    _user_home_normalized: "{{ (_user_home_raw | regex_replace('/+', '/') | regex_replace('/+$', '')) or '/' }}"
+    _user_home_realpath: "{{ _users_ssh_home_realpaths.get(_user.username, _user_home_normalized) }}"
+  loop: "{{ _users_present }}"
+  loop_control:
+    loop_var: _user
+    label: "{{ _user.username }}"
+  when:
+    - not (_user_home_normalized is regex('(^|/)\\.{1,2}($|/)'))
+    - _user_home_normalized not in _users_protected_paths_norm
+    - _user_home_realpath not in _users_protected_paths_norm
+    - _user.authorized is defined
+    - _user.authorized | length > 0
+
+- name: SSH | Revoke authorized_keys when exclusive list is empty
+  ansible.builtin.file:
+    path: "{{ _user_home_normalized }}/.ssh/authorized_keys"
+    state: absent
+  vars:
+    _user_home_raw: "{{ _users_ssh_homes.get(_user.username, _user.home | default(users_home_base ~ '/' ~ _user.username)) }}"
+    _user_home_normalized: "{{ (_user_home_raw | regex_replace('/+', '/') | regex_replace('/+$', '')) or '/' }}"
+    _user_home_realpath: "{{ _users_ssh_home_realpaths.get(_user.username, _user_home_normalized) }}"
+  loop: "{{ _users_present }}"
+  loop_control:
+    loop_var: _user
+    label: "{{ _user.username }}"
+  when:
+    - not (_user_home_normalized is regex('(^|/)\\.{1,2}($|/)'))
+    - _user_home_normalized not in _users_protected_paths_norm
+    - _user_home_realpath not in _users_protected_paths_norm
+    - _user.authorized is defined
+    - _user.authorized | length == 0
+    - _user.exclusive | default(users_default_ssh_exclusive) | bool

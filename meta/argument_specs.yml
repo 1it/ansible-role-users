@@ -1,0 +1,577 @@
+---
+argument_specs:
+  main:
+    short_description: Manage Linux user accounts, groups, SSH keys, sudoers drop-ins, PAM limits, and systemd lingering.
+    description:
+      - Declaratively manages Linux user accounts, primary and supplementary groups, SSH directories and authorized keys, validated sudoers drop-ins, PAM resource limits, and systemd user lingering across Debian, Ubuntu, and Enterprise Linux systems.
+    options:
+      users:
+        type: list
+        elements: dict
+        default: []
+        description: Primary list of user account definitions to manage.
+        options:
+          username:
+            type: str
+            required: true
+            description: Linux username.
+          state:
+            type: str
+            choices:
+              - present
+              - absent
+            default: present
+            description: Desired account state.
+          target_hosts:
+            type: list
+            elements: str
+            description: Inventory group names, hostnames, or 'all' where this user applies. Defaults to users_default_target_hosts; pass an empty list to match no hosts.
+          uid:
+            type: int
+            description: Explicit numeric UID.
+          gid:
+            type: int
+            description: Explicit numeric GID for the per-user primary group (defaults to uid).
+          group:
+            type: str
+            description: Explicit primary group name overriding users_create_group_per_user and users_default_group.
+          groups:
+            type: list
+            elements: str
+            description: Supplementary group memberships for the user.
+          append:
+            type: bool
+            description: Append supplementary groups instead of replacing them (defaults to users_groups_append).
+          name:
+            type: str
+            description: Full name / GECOS comment field.
+          shell:
+            type: str
+            description: Login shell path.
+          home:
+            type: str
+            description: Custom home directory path.
+          create_home:
+            type: bool
+            description: Whether to create the user's home directory.
+          home_mode:
+            type: str
+            description: Octal permission mode for the home directory (e.g. '0750').
+          homedir_recurse:
+            type: bool
+            description: Recursively enforce ownership on the home directory (opt-in).
+          system:
+            type: bool
+            default: false
+            description: Create as a system account.
+          password:
+            type: str
+            no_log: true
+            description: Encrypted password hash (crypt format). Automatically protected by no_log when users_no_log is true.
+          update_password:
+            type: str
+            choices:
+              - always
+              - on_create
+            description: When to update the account password (defaults to users_default_update_password).
+          password_lock:
+            type: bool
+            description: Lock or unlock the user's password.
+          expires:
+            type: float
+            description: Account expiration timestamp in seconds since epoch (-1 disables expiration).
+          authorized:
+            type: list
+            elements: str
+            description: List of SSH public keys to install in ~/.ssh/authorized_keys.
+          exclusive:
+            type: bool
+            description: Remove unlisted SSH keys from authorized_keys (defaults to users_default_ssh_exclusive).
+          generate_key:
+            type: bool
+            default: false
+            description: Generate an SSH key pair for the user if not present.
+          ssh_key_type:
+            type: str
+            description: SSH key algorithm for generated key (defaults to users_default_ssh_key_type).
+          ssh_key_bits:
+            type: int
+            description: Key size in bits for generated key (omitted for ed25519 unless explicitly specified).
+          ssh_key_file:
+            type: str
+            description: Path (relative to home or absolute) for generated SSH key.
+          ssh_key_comment:
+            type: str
+            description: Comment embedded in the generated SSH key.
+          sudo:
+            type: dict
+            description: Optional sudoers drop-in configuration for this user.
+            options:
+              state:
+                type: str
+                choices:
+                  - present
+                  - absent
+                default: present
+                description: Whether the user's sudoers drop-in should exist.
+              nopasswd:
+                type: bool
+                description: Allow passwordless sudo execution (defaults to users_sudoers_default_nopasswd).
+              commands:
+                type: list
+                elements: str
+                default:
+                  - "ALL"
+                description: Commands permitted via sudo.
+              runas:
+                type: str
+                default: "ALL:ALL"
+                description: Target user/group specification in sudoers rule.
+              hosts:
+                type: str
+                default: "ALL"
+                description: Host specification in sudoers rule.
+              defaults:
+                type: list
+                elements: str
+                default: []
+                description: Per-user Defaults directives (e.g. '!requiretty').
+          limits:
+            type: list
+            elements: dict
+            description: Per-user PAM resource limits added to users_limits_file.
+            options:
+              type:
+                type: str
+                required: true
+                choices:
+                  - soft
+                  - hard
+                  - "-"
+                description: Limit type (soft, hard, or '-').
+              item:
+                type: str
+                required: true
+                description: PAM resource item (e.g. nofile, nproc, memlock, core).
+              value:
+                type: str
+                required: true
+                description: Limit value (integer or 'unlimited').
+          linger:
+            type: bool
+            description: Enable or disable systemd user lingering via loginctl.
+          force:
+            type: bool
+            description: Pass force=true when removing the user account.
+          delete_homedir:
+            type: bool
+            description: Override users_delete_homedirs for this user when state is absent.
+
+      users_extra:
+        type: list
+        elements: dict
+        default: []
+        description: Additive list of user definitions merged onto users (later entry wins on same username).
+        options:
+          username:
+            type: str
+            required: true
+            description: Linux username.
+          state:
+            type: str
+            choices:
+              - present
+              - absent
+            default: present
+            description: Desired account state.
+          target_hosts:
+            type: list
+            elements: str
+            description: Inventory group names, hostnames, or 'all' where this user applies.
+          uid:
+            type: int
+            description: Explicit numeric UID.
+          gid:
+            type: int
+            description: Explicit numeric GID for the per-user primary group.
+          group:
+            type: str
+            description: Explicit primary group name.
+          groups:
+            type: list
+            elements: str
+            description: Supplementary group memberships.
+          append:
+            type: bool
+            description: Append supplementary groups instead of replacing them.
+          name:
+            type: str
+            description: Full name / GECOS comment field.
+          shell:
+            type: str
+            description: Login shell path.
+          home:
+            type: str
+            description: Custom home directory path.
+          create_home:
+            type: bool
+            description: Whether to create the user's home directory.
+          home_mode:
+            type: str
+            description: Octal permission mode for the home directory.
+          homedir_recurse:
+            type: bool
+            description: Recursively enforce ownership on the home directory.
+          system:
+            type: bool
+            default: false
+            description: Create as a system account.
+          password:
+            type: str
+            no_log: true
+            description: Encrypted password hash.
+          update_password:
+            type: str
+            choices:
+              - always
+              - on_create
+            description: When to update the account password.
+          password_lock:
+            type: bool
+            description: Lock or unlock the user's password.
+          expires:
+            type: float
+            description: Account expiration timestamp in seconds since epoch.
+          authorized:
+            type: list
+            elements: str
+            description: List of SSH public keys.
+          exclusive:
+            type: bool
+            description: Remove unlisted SSH keys from authorized_keys.
+          generate_key:
+            type: bool
+            default: false
+            description: Generate an SSH key pair for the user.
+          ssh_key_type:
+            type: str
+            description: SSH key algorithm for generated key.
+          ssh_key_bits:
+            type: int
+            description: Key size in bits for generated key.
+          ssh_key_file:
+            type: str
+            description: Path for generated SSH key.
+          ssh_key_comment:
+            type: str
+            description: Comment embedded in the generated SSH key.
+          sudo:
+            type: dict
+            description: Optional sudoers drop-in configuration.
+            options:
+              state:
+                type: str
+                choices:
+                  - present
+                  - absent
+                default: present
+                description: Whether the user's sudoers drop-in should exist.
+              nopasswd:
+                type: bool
+                description: Allow passwordless sudo execution.
+              commands:
+                type: list
+                elements: str
+                default:
+                  - "ALL"
+                description: Commands permitted via sudo.
+              runas:
+                type: str
+                default: "ALL:ALL"
+                description: Target user/group specification in sudoers rule.
+              hosts:
+                type: str
+                default: "ALL"
+                description: Host specification in sudoers rule.
+              defaults:
+                type: list
+                elements: str
+                default: []
+                description: Per-user Defaults directives.
+          limits:
+            type: list
+            elements: dict
+            description: Per-user PAM resource limits.
+            options:
+              type:
+                type: str
+                required: true
+                choices:
+                  - soft
+                  - hard
+                  - "-"
+                description: Limit type.
+              item:
+                type: str
+                required: true
+                description: PAM resource item.
+              value:
+                type: str
+                required: true
+                description: Limit value.
+          linger:
+            type: bool
+            description: Enable or disable systemd user lingering.
+          force:
+            type: bool
+            description: Pass force=true when removing the user account.
+          delete_homedir:
+            type: bool
+            description: Override users_delete_homedirs for this user when state is absent.
+
+      users_group_list:
+        type: list
+        elements: dict
+        default: []
+        description: Primary list of additional groups to manage.
+        options:
+          name:
+            type: str
+            required: true
+            description: Linux group name.
+          state:
+            type: str
+            choices:
+              - present
+              - absent
+            default: present
+            description: Desired group state.
+          gid:
+            type: int
+            description: Explicit numeric GID.
+          system:
+            type: bool
+            default: false
+            description: Create as a system group.
+          force:
+            type: bool
+            default: false
+            description: Force removal when state is absent (requires Ansible >= 2.15 when true).
+
+      users_extra_groups:
+        type: list
+        elements: dict
+        default: []
+        description: Additive list of additional groups merged onto users_group_list.
+        options:
+          name:
+            type: str
+            required: true
+            description: Linux group name.
+          state:
+            type: str
+            choices:
+              - present
+              - absent
+            default: present
+            description: Desired group state.
+          gid:
+            type: int
+            description: Explicit numeric GID.
+          system:
+            type: bool
+            default: false
+            description: Create as a system group.
+          force:
+            type: bool
+            default: false
+            description: Force removal when state is absent (requires Ansible >= 2.15 when true).
+
+      users_default_target_hosts:
+        type: list
+        elements: str
+        default:
+          - all
+        description: Default target host groups when target_hosts is omitted on a user entry.
+
+      users_default_shell:
+        type: str
+        default: "/bin/bash"
+        description: Default login shell for regular user accounts.
+
+      users_default_system_shell:
+        type: str
+        default: "/usr/sbin/nologin"
+        description: Default login shell for system accounts when shell is omitted.
+
+      users_default_group:
+        type: str
+        default: "users"
+        description: Default primary group when users_create_group_per_user is false.
+
+      users_create_group_per_user:
+        type: bool
+        default: true
+        description: Create a dedicated primary group matching each username.
+
+      users_create_homedir:
+        type: bool
+        default: true
+        description: Create home directories for regular user accounts by default.
+
+      users_home_base:
+        type: str
+        default: "/home"
+        description: Default parent directory for user home directories.
+
+      users_home_mode:
+        type: str
+        default: "0750"
+        description: Octal permission mode applied to managed user home directories.
+
+      users_homedir_recurse:
+        type: bool
+        default: false
+        description: Recursively enforce ownership on user home directories (opt-in).
+
+      users_groups_append:
+        type: bool
+        default: false
+        description: Default append behavior for supplementary groups.
+
+      users_default_update_password:
+        type: str
+        choices:
+          - always
+          - on_create
+        default: "always"
+        description: Default update_password setting for ansible.builtin.user.
+
+      users_no_log:
+        type: bool
+        default: true
+        description: Enable no_log on user account management whenever any managed user defines password.
+
+      users_default_ssh_key_type:
+        type: str
+        default: "ed25519"
+        description: Default SSH key algorithm when generate_key is true.
+
+      users_default_ssh_key_bits:
+        type: int
+        default: 4096
+        description: Default SSH key length in bits for key types that accept bit sizes.
+
+      users_default_ssh_exclusive:
+        type: bool
+        default: false
+        description: Default exclusive mode for SSH authorized_keys.
+
+      users_ssh_dir_mode:
+        type: str
+        default: "0700"
+        description: Octal permission mode for user .ssh directories.
+
+      users_ssh_authorized_keys_mode:
+        type: str
+        default: "0600"
+        description: Octal permission mode for user authorized_keys files.
+
+      users_sudoers_dir:
+        type: str
+        default: "/etc/sudoers.d"
+        description: Directory for per-user sudoers drop-in files.
+
+      users_sudoers_file_prefix:
+        type: str
+        default: "90-ansible-user-"
+        description: Filename prefix for role-managed sudoers drop-in files.
+
+      users_sudoers_default_nopasswd:
+        type: bool
+        default: false
+        description: Default nopasswd value for sudoers rules.
+
+      users_limits_file:
+        type: str
+        default: "/etc/security/limits.d/90-ansible-users.conf"
+        description: File path for role-managed PAM resource limits drop-in.
+
+      users_limits:
+        type: list
+        elements: dict
+        default: []
+        description: Global list of PAM resource limit entries.
+        options:
+          domain:
+            type: str
+            required: true
+            description: Username, @groupname, or wildcard (*).
+          type:
+            type: str
+            required: true
+            choices:
+              - soft
+              - hard
+              - "-"
+            description: Limit type (soft, hard, or '-').
+          item:
+            type: str
+            required: true
+            description: PAM resource item (e.g. nofile, nproc, memlock).
+          value:
+            type: str
+            required: true
+            description: Limit value (integer or 'unlimited').
+
+      users_extra_limits:
+        type: list
+        elements: dict
+        default: []
+        description: Additive PAM resource limit entries merged onto users_limits.
+        options:
+          domain:
+            type: str
+            required: true
+            description: Username, @groupname, or wildcard (*).
+          type:
+            type: str
+            required: true
+            choices:
+              - soft
+              - hard
+              - "-"
+            description: Limit type.
+          item:
+            type: str
+            required: true
+            description: PAM resource item.
+          value:
+            type: str
+            required: true
+            description: Limit value.
+
+      users_manage_prerequisites:
+        type: bool
+        default: true
+        description: Install missing prerequisite packages (openssh-client(s), sudo) only when required by configured users.
+
+      users_delete_homedirs:
+        type: bool
+        default: false
+        description: Remove home directories when deleting users (destructive, opt-in).
+
+      delete_homedirs:
+        type: bool
+        default: false
+        description: Legacy alias for users_delete_homedirs.
+
+      users_force_remove:
+        type: bool
+        default: false
+        description: Pass force=true to ansible.builtin.user when removing accounts.
+
+      users_protected_home_paths:
+        type: list
+        elements: str
+        description: Protected system directories that are never chowned, modified, or deleted.

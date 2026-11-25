@@ -1,0 +1,5 @@
+# Managed by Ansible (ansible-role-users) - do not edit manually.
+# <domain> <type> <item> <value>
+{% for entry in _users_limits_resolved %}
+{{ entry.domain }} {{ entry.type }} {{ entry.item }} {{ entry.value }}
+{% endfor %}
