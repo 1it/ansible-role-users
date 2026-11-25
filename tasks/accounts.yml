@@ -89,7 +89,7 @@
 
 - name: Accounts | Ensure home directory ownership and permissions
   ansible.builtin.file:
-    path: "{{ _user_home_normalized }}"
+    path: "{{ _user_home_realpath }}"
     state: directory
     owner: "{{ _user.username }}"
     group: "{{ _user_primary_group }}"
@@ -129,7 +129,7 @@
 
 - name: Accounts | Recursively ensure home directory ownership (opt-in)
   ansible.builtin.file:
-    path: "{{ _user_home_normalized }}"
+    path: "{{ _user_home_realpath }}"
     state: directory
     owner: "{{ _user.username }}"
     group: "{{ _user_primary_group }}"
